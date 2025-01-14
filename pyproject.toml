@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dnd_search"
+version = "0.0.1"
+description = "A simple package for querying DND 5e information"
+readme = "README.md"
+dependencies = ["beautifulsoup4", "requests", "tabulate"]
+
+[project.scripts]
+dnd_search = "dnd_search.cli:cli"
+
+# [tool.setuptools.packages.find]
+# where = ["src"]
