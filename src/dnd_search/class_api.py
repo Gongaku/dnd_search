@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-import dnd_search.api as api
 import logging
 import re
+
 from bs4 import BeautifulSoup, NavigableString
+
+import dnd_search.api as api
 from dnd_search.dnd_data import Feature, Subclass, DnDClass
 from dnd_search.format_output import format_error
 
@@ -12,10 +14,10 @@ def table_to_list(input_str: NavigableString) -> list:
     Converts a NavigableString string into a list of strings containing the text of each table cell
 
     Args:
-        input_str(NavigableString): HTML string containing an HTML Table to convert
+        input_str: HTML string containing an HTML Table to convert
 
     Returns:
-        list(str): A 2D list containing all the text elements contained within the HTML table
+        A 2D list containing all the text elements contained within the HTML table
     """
     if input_str is None:
         return None
@@ -37,10 +39,10 @@ def separate_section(sections: list) -> list[list]:
     I.e. any html element starting with h[1-5] splits the sections
 
     Args:
-        section (list): A section containing relevant tags that need to be sorted
+        section: A section containing relevant tags that need to be sorted
 
     Return:
-        list(list): A 2D list containing the separated sections
+        A 2D list containing the separated sections
     """
     features = []
     previous_index = 0
@@ -60,11 +62,11 @@ def group_features_by_header(feature_list: list, skip_first: bool = False) -> li
     If will split the list at any point it encounters a header.
 
     Args:
-        feature_list (str): List of tags to parse through and separate.
-        skip_first (bool): Check to skip the first element in the feature_list
+        feature_list: List of tags to parse through and separate.
+        skip_first: Check to skip the first element in the feature_list
 
     Returns:
-        list[Feature]: A list containing feature objects with info such as feature name and description
+        A list containing feature objects with info such as feature name and description
     """
     features = []
 
@@ -98,14 +100,17 @@ def group_features_by_header(feature_list: list, skip_first: bool = False) -> li
 
 def get_class(class_name: str) -> DnDClass:
     """
-    Pulls the base class details including the description, multiclass requirements, leveling table, and features.
-    The class features includes information such as Hit Dice, Proficiencies, Subclasses/Archetypes, and Spell Casting
+    Pulls the base class details including the description,
+    multiclass requirements, leveling table, and features.
+
+    The class features includes information such as Hit Dice,
+    Proficiencies, Subclasses/Archetypes, and Spell Casting
 
     Args:
-        class_name (str): Name of the DnD 5e class you would like to pull data for
+        class_name: Name of the DnD 5e class you would like to pull data for
 
     Returns:
-        DnDClass: an object containing the class' description, multiclass requirements, leveling table, and features
+        An object containing the class' description, multiclass requirements, leveling table, and features
     """
     uri = f"{api.WIKIDOT_URI}/{class_name.lower()}"
     try:
@@ -117,22 +122,28 @@ def get_class(class_name: str) -> DnDClass:
 
     soup = BeautifulSoup(content, "html.parser")
     name = soup.find(class_="page-title").text
-    description, multiclass, leveling_table, features = [
+    sections = [
         section for section
         in soup.find(id="page-content")
-        if section is not None and section != '\n'
+        if section is not None
+        and section != '\n'
+        and section.name != 'br'
     ]
 
-    description = description.text
-    multiclass = multiclass.text
+    for index in range(0, len(sections[:3])):
+        if 'multiclass' in sections[index].text:
+            break
+
+    description = ' '.join([tag.text for tag in sections[:index]])
+    multiclass = sections[index].text
+    leveling_table = sections[index+1]
+    features = sections[index+2:]
     leveling_headers, *leveling_table = table_to_list(leveling_table)
     class_components = DnDClass(name, description, multiclass, leveling_headers, leveling_table, None)
 
     features = list(
         next(
-            feature for feature
-            in features
-            if feature != '\n'
+            feature for feature in features if feature != '\n'
         ).find_all(["h1", "h3", "h5", "p", "ul", "table"])
     )
 
@@ -148,11 +159,11 @@ def get_subclass(class_name: str, subclass: str) -> DnDClass:
     Pulls the subclass details including the description and features.
 
     Args:
-        class_name (str): Name of the DnD 5e class you would like to pull data for
-        subclass (str): Name of the subclass to pull data for
+        class_name: Name of the DnD 5e class you would like to pull data for
+        subclass: Name of the subclass to pull data for
 
     Returns:
-        Subclass: an object containing the subclass' description and features
+        An object containing the subclass' description and features
     """
     uri = f"{api.WIKIDOT_URI}/{class_name.lower()}:{subclass.replace(' ', '-').lower()}"
     try:

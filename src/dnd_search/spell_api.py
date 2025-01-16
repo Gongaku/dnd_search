@@ -1,7 +1,10 @@
-import dnd_search.api as api
+#!/usr/bin/env python3
 import logging
 import re
+
 from bs4 import BeautifulSoup
+
+import dnd_search.api as api
 from dnd_search.dnd_data import Spell
 from dnd_search.format_output import format_error
 
@@ -11,14 +14,15 @@ def get_spell(spell_name: str) -> Spell:
     follows the /spell:spell_name format.
 
     Args:
-        spell_name (str): Name of DnD 5e spell
+        spell_name: Name of DnD 5e spell
 
     Returns:
-        Spell: Spell object containing all specified information
+        Spell object containing all specified information
     """
     uri = f"{api.WIKIDOT_URI}/spell:{spell_name.replace(" ", "-").replace("/", "-").lower()}"
     try:
         content = api.api_call(uri)
+
     except AssertionError:
         output = format_error("spell", spell_name.title())
         logging.error(output)
@@ -41,6 +45,7 @@ def get_spell(spell_name: str) -> Spell:
             level, school = re\
                 .search("(^[0-9].*level) (.*)", text)\
                 .groups()
+
         elif re.search("cantrip$", text):
             school, level = re\
                 .search("(.*) (cantrip)$", text)\
@@ -61,13 +66,13 @@ def get_spell(spell_name: str) -> Spell:
                 re.findall(pattern, text)
 
         elif d.name == "ul":
-            # effect = f"{effect}\t• {text.strip()}\n"
             effect = f"{effect}\t* {text.strip()}\n"
 
         else:
             if "At Higher Levels." in text:
                 text = text.replace("At Higher Levels.", "").strip()
                 higher_level_effect = f"{text}\n"
+
             else:
                 effect = f"{effect}{text}\n"
 
@@ -92,16 +97,18 @@ def get_spell_list(class_name: str, trim_output: bool = False) -> list[Spell]:
     DnD 5e spells on wikidot.
 
     Args:
-        class_name (str): Name of the Dnd Player Character Class
+        class_name: Name of the Dnd Player Character Class
 
     Returns:
-        list[Spell]: A list containing abbreviated spell information.
+        A list containing abbreviated spell information.
                           Does not include spell effect.
     """
     class_name = f":{class_name.lower()}" if class_name else ""
     uri = f"{api.WIKIDOT_URI}/spells{class_name}"
+
     try:
         content = api.api_call(uri)
+
     except AssertionError:
         output = format_error("class", class_name.title())
         logging.error(output)
@@ -114,11 +121,14 @@ def get_spell_list(class_name: str, trim_output: bool = False) -> list[Spell]:
     spell_list = []
     for spell in spells:
         tags = [tag.name for tag in spell]
+
         if "th" in tags:
             level += 1
             continue
+
         name, school, casting_time, spell_range, duration, components = \
             spell.text.split("\n")[1:-1]
+
         if trim_output:
             name = truncate_string(name, 15)
             school = school[:3]
@@ -126,11 +136,14 @@ def get_spell_list(class_name: str, trim_output: bool = False) -> list[Spell]:
             casting_time = re.sub("Bonus", "B", casting_time)
             casting_time = re.sub("Minute", "Min", casting_time)
             duration = truncate_string(duration, 10)
+
         else:
             if "R" in casting_time:
                 casting_time = re.sub("R$", "(Ritual)", casting_time)
+
             if re.search("[CDGT]+$", school):
                 school = re.sub("[CDGT]+$", "", school)
+
         spell_range = re.sub("[ -]+f[eo]+t", " ft", spell_range)
         level_name = "Cantrip" if level == 0 else level
 
@@ -160,8 +173,8 @@ def truncate_string(input_str: str, max_length: int = 10) -> str:
     If string is less than the max_length, then nothing is changed.
 
     Args:
-        input_str (str): String to try to truncate.
-        max_length (int): Sets the maximum length of attempting to truncate the string
+        input_str: String to try to truncate.
+        max_length: Sets the maximum length of attempting to truncate the string
 
     Returns:
         str: updated string
