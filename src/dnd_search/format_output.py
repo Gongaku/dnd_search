@@ -10,7 +10,18 @@ from shutil import get_terminal_size
 from dnd_search.dnd_data import Spell, Feature, DnDClass, Subclass
 
 class colors():
-    """Class containing a few ANSI escape codes for terminal colored output"""
+    """
+    Class containing a few ANSI escape codes for terminal colored output
+
+    Contains the following:
+    - CLEAR
+    - BOLD
+    - DISABLE
+    - UNDERLINE
+    - RED
+    - GREEN
+    - BLUE
+    """
     _start = "\033["
     CLEAR = f"{_start}0m"
     BOLD = f"{_start}01m"
@@ -19,6 +30,7 @@ class colors():
     RED = f"{_start}91m"
     GREEN = f"{_start}92m"
     BLUE = f"{_start}94m"
+
 
 def format_json(json_obj: dict) -> str:
     """
@@ -33,7 +45,7 @@ def format_json(json_obj: dict) -> str:
     return json.dumps(json_obj, indent=4)
 
 
-def format_table(table: list[list], headers=list[str]) -> str:
+def format_table(table: list[list], headers: list[str], output_format: str = 'txt') -> str:
     """
     Prints the data in a tabular format. Wrapper around tabulate function
 
@@ -44,10 +56,34 @@ def format_table(table: list[list], headers=list[str]) -> str:
     Returns:
         String containing the formatted table
     """
-    return tabulate.tabulate(table, headers=headers, tablefmt='simple')
+    formatted_table = None
+
+    if 'sv' in output_format:
+        table = [headers] + table
+        chars = (',', '\t')
+
+        if output_format == "csv":
+            joining_char, replace_char = chars
+        else:
+            replace_char, joining_char = chars
+
+        replace_pattern = f"[{joining_char}\n]"
+        print([[re.sub(replace_pattern, replace_char, col) for col in row] for row in table])
+
+        formatted_table = '\n'.join([
+            joining_char.join([
+                re.sub(joining_char, replace_pattern, str(col))
+                for col in row
+            ]) for row in table
+        ])
+    else:
+        formatted_table = tabulate.tabulate(table, headers=headers, tablefmt='simple')
+
+    return formatted_table
 
 
 def format_error(subcommand: str, name: str) -> str:
+    """Error message"""
     return textwrap.dedent(
         f"Unable to find data for the {subcommand} '{name.replace(':', '')}'. "
         f"Please ensure that the {subcommand} is spelled correctly."
@@ -68,21 +104,30 @@ def format_spell(spell: Spell, output_format: str = "txt") -> None:
         return None
 
     if output_format == "csv" or output_format == "tsv":
-        joining_char = "," if output_format == "csv" else "\t"
+        chars = (',', '\t')
+
+        if output_format == "csv":
+            joining_char, replace_char = chars
+            replace_char = ','
+        else:
+            replace_char, joining_char = chars
+
         replace_pattern = f"[{joining_char}\n]"
-        formatted_spell = joining_char.join((
-            spell.name,
-            spell.source,
-            spell.level,
-            spell.school,
-            spell.casting_time,
-            spell.spell_range,
-            spell.duration,
-            re.sub(replace_pattern, "", spell.components),
-            re.sub(replace_pattern, "", spell.higher_level_effect),
-            re.sub(replace_pattern, "", spell.higher_level_effect),
-            joining_char.join(spell.classes)
-        ))
+        formatted_spell = joining_char.join([
+            f'"{col}"' for col in (
+                spell.name,
+                spell.source,
+                spell.level,
+                spell.school,
+                spell.casting_time,
+                spell.spell_range,
+                spell.duration,
+                re.sub(replace_pattern, "", spell.components),
+                re.sub(replace_pattern, "", spell.effect),
+                re.sub(replace_pattern, "", spell.higher_level_effect),
+                replace_char.join(spell.classes)
+            )
+        ])
 
     elif output_format == "json":
         formatted_spell = format_json(spell.dict())

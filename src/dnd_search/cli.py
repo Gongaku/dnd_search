@@ -280,7 +280,8 @@ def cli() -> None:
             if args.leveling:
                 output = format_output.format_table(
                     class_data.leveling_table,
-                    headers=class_data.leveling_headers)
+                    headers=class_data.leveling_headers,
+                    output_format=args.output)
             elif args.list_subclasses:
                 output = list_subclasses(class_data, args)
 
@@ -305,8 +306,7 @@ def cli() -> None:
     else:
         parser.parse_args(['--help'])
 
-    for line in output:
-        sys.stdout.write(line)
+    print(output)
 
 
 if __name__ == "__main__":
