@@ -52,7 +52,7 @@ def spell_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
     get_spell_parser.add_argument(
         "-o", "--output",
         type=str,
-        choices=["txt", "csv", "tsv", "json"],
+        choices=["txt", "md", "csv", "tsv", "json"],
         help="Changes the format that the data is outputted. Default: txt")
 
     # Parser for spell list
@@ -137,7 +137,7 @@ def class_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
     class_base_parser.add_argument(
         "-o", "--output",
         type=str,
-        choices=["txt", "csv", "tsv", "json"],
+        choices=["txt", "md", "csv", "tsv", "json"],
         help="Changes the format that the data is outputted. Default: txt")
 
     class_sub_parser = class_subparsers.add_parser(
@@ -160,7 +160,7 @@ def class_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
     class_sub_parser.add_argument(
         "-o", "--output",
         type=str,
-        choices=["txt", "csv", "tsv", "json"],
+        choices=["txt", "md", "csv", "tsv", "json"],
         help="Changes the format that the data is outputted. \
                 The txt option outputs the data as a table. Default: txt")
 

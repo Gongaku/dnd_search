@@ -132,6 +132,25 @@ def format_spell(spell: Spell, output_format: str = "txt") -> None:
     elif output_format == "json":
         formatted_spell = format_json(spell.dict())
 
+    elif output_format == "md":
+        hle = f"\nAt Higher Levels. {spell.higher_level_effect}\n" \
+            if spell.higher_level_effect else ''
+        formatted_spell = textwrap.dedent(
+            f"""\
+            {spell.name}
+            -
+            Source:       {spell.source}\\
+            Level:        {spell.level.capitalize()}\\
+            School:       {spell.school.capitalize()}\\
+            Casting Time: {spell.casting_time}\\
+            Range:        {spell.spell_range}\\
+            Components:   {spell.components}\\
+            Duration:     {spell.duration}\\
+            Effect:""") + f"\n{'\n'.join([sentence.strip() for sentence in spell.effect.split('.')])}" + hle + textwrap.dedent(
+            f"""\
+            Spell Lists: {', '.join(spell.classes)}
+            """)
+
     else:
         TERM_WIDTH, _ = get_terminal_size()
         padding = int((TERM_WIDTH - len(spell.name)) / 2)
