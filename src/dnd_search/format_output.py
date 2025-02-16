@@ -148,6 +148,7 @@ def format_spell(spell: Spell, output_format: str = "txt") -> None:
             {colors.BOLD}Casting Time:{colors.CLEAR} {spell.casting_time}
             {colors.BOLD}Range:{colors.CLEAR}        {spell.spell_range}
             {colors.BOLD}Components:{colors.CLEAR}   {spell.components}
+            {colors.BOLD}Duration:{colors.CLEAR}     {spell.duration}
             """) + f"\n{spell.effect.replace('*', '\u2022')}" + hle + textwrap.dedent(
             f"""\
             {colors.BOLD}Spell Lists:{colors.CLEAR} {', '.join(spell.classes)}

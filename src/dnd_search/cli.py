@@ -249,7 +249,7 @@ def cli() -> None:
     args = parser.parse_args()
 
     if len(sys.argv) <= 2:
-        parser.parse_args([sys.argv[1], '--help'])
+        parser.parse_args(['--help'])
 
     elif args.subparser_name == "spell":
         output = None

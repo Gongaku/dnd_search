@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dnd_search"
-version = "0.0.1"
+version = "0.0.2"
 description = "A simple package for querying DND 5e information"
 readme = "README.md"
 dependencies = ["beautifulsoup4", "requests", "tabulate"]
