@@ -7,6 +7,16 @@ During my own sessions, I've found that I needed to quickly search up the effect
 This is meant as a means to alleviate that issue. Although I'm weird in write my Dnd notes in Vim.
 
 ## Usage
+First create a virtual environment and requirements. Then once this is completed, simply install this repo as a module using pip.
+```sh
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements
+pip install -e .
+```
+
+Once this has been completed, then you can simply call `dnd_search` while in the virtual environment
+
 ```sh
 usage: dnd_search [-h] {spell,class} ...
 
