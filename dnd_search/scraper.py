@@ -11,7 +11,7 @@ from typing import Any, Callable, TypeVar, cast
 _DetailT = TypeVar("_DetailT")
 
 import requests
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 from dnd_search import cache
 from dnd_search.models import (
@@ -57,6 +57,7 @@ _LEVEL_MAP = {
 
 # Compiled regex patterns
 _RE_MULTI_SPACE = re.compile(r" {2,}")
+_RE_HTTP_SCHEME = re.compile(r"^https?://")
 _RE_LEVEL_SCHOOL = re.compile(r"^\d+(st|nd|rd|th)-level", re.I)
 _RE_CANTRIP = re.compile(r"^\w+\s+cantrip\b|^cantrip$", re.I)
 _RE_SPELL_LISTS = re.compile(r"^spell lists?\.", re.I)
@@ -139,6 +140,25 @@ def _text(tag: Tag | None) -> str:
     if tag is None:
         return ""
     return _RE_MULTI_SPACE.sub(" ", tag.get_text(separator=" ", strip=True))
+
+
+def _first_line(tag: Tag) -> str:
+    """Return only the text before the first <br> in a tag.
+
+    Some wiki prerequisite paragraphs merge the prerequisite and description
+    in one <p>, separated by <br> tags.  Walking direct children and stopping
+    at the first <br> preserves inline link text (e.g. feat hyperlinks) while
+    still splitting at real line-break boundaries.
+    """
+    parts: list[str] = []
+    for child in tag.children:
+        if isinstance(child, Tag) and child.name == "br":
+            break
+        if isinstance(child, Tag):
+            parts.append(child.get_text(separator=" ", strip=True))
+        elif isinstance(child, NavigableString):
+            parts.append(str(child))
+    return _RE_MULTI_SPACE.sub(" ", " ".join(parts)).strip()
 
 
 def _parse_granted_spells(table: Tag) -> list[SpellTableEntry] | None:
@@ -225,10 +245,21 @@ def _para_rich(el) -> str:
     return _para_inline(el, bold=("[bold]", "[/bold]"), italic=("[italic]", "[/italic]"))
 
 
+def _norm_url(url: str) -> str:
+    """Strip scheme and trailing slash for scheme-agnostic URL comparison."""
+    return _RE_HTTP_SCHEME.sub("", url).rstrip("/")
+
+
 def _href(tag: Tag | None) -> str:
     if tag is None:
         return ""
-    return f"""{BASE_URL}{str(tag.get("href", ""))}"""
+    raw = str(tag.get("href", ""))
+    # Wiki table links sometimes use http:// — normalise to https://.
+    if raw.startswith("http://"):
+        raw = "https://" + raw[len("http://"):]
+    if raw.startswith("/"):
+        return BASE_URL + raw
+    return raw
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +489,25 @@ _BASE_CLASSES = [
 ]
 
 
+# First-column header names used by each class's subclass table on the wiki.
+# Each class calls its subclass concept something different (Path, Circle, etc.).
+_SUBCLASS_COL_NAMES = {
+    "archetype",   # Fighter, Rogue
+    "circle",      # Druid
+    "college",     # Bard
+    "conclave",    # Ranger
+    "domain",      # Cleric
+    "oath",        # Paladin
+    "origin",      # Sorcerer
+    "path",        # Barbarian
+    "patron",      # Warlock
+    "school",      # Wizard
+    "specialty",   # Artificer
+    "subclass",    # generic fallback
+    "tradition",   # Monk
+}
+
+
 def _fetch_home_links(use_cache: bool = True) -> list[tuple[str, str]]:
     """Return (name, href) pairs from the main wikidot index page."""
     soup = _fetch(BASE_URL + "/", use_cache)
@@ -556,7 +606,7 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
     subclasses = []
     for table in content.find_all("table"):
         headers = [_text(th).lower() for th in table.find_all("th")]
-        if any("archetype" in h or "subclass" in h or "name" in h for h in headers):
+        if any(h in _SUBCLASS_COL_NAMES for h in headers):
             for row in table.find_all("tr")[1:]:
                 cells = row.find_all(["td", "th"])
                 if cells:
@@ -721,7 +771,7 @@ def fetch_subclasses(
             data = fetch_class_detail(cls_url, use_cache)
             for entry in data.get("subclasses", []):
                 if entry.get("url") and entry.get("source"):
-                    source_map[entry["url"]] = entry["source"]
+                    source_map[_norm_url(entry["url"])] = entry["source"]
         except Exception as e:
             logger.debug(f"Could not fetch subclass sources for {cls}: {e}")
 
@@ -754,7 +804,7 @@ def fetch_subclasses(
                 name=display_name,
                 url=full_url,
                 parent_class=parent_slug.title(),
-                source=source_map.get(full_url, ""),
+                source=source_map.get(_norm_url(full_url), ""),
             )
         )
 
@@ -848,9 +898,9 @@ def fetch_subclass_detail(url: str, use_cache: bool = True) -> SubclassDetailDic
 
 
 def fetch_feats(use_cache: bool = True) -> list[Feat]:
-    """Collect all feat links from the main index page."""
+    """Collect all feat links from the main index page and enrich with prerequisites."""
     links = _fetch_home_links(use_cache)
-    feats: list[Feat] = []
+    stubs: list[Feat] = []
     seen: set[str] = set()
 
     for name, href in links:
@@ -859,10 +909,53 @@ def fetch_feats(use_cache: bool = True) -> list[Feat]:
         if href in seen:
             continue
         seen.add(href)
-        feats.append(Feat(name=name, url=BASE_URL + href))
+        slug = href[len("/feat:"):]
+        display_name = f"{name} (UA)" if slug.endswith("-ua") else name
+        stubs.append(Feat(name=display_name, url=BASE_URL + href))
+
+    if not stubs:
+        return []
+
+    def _enrich(feat: Feat) -> Feat:
+        basic = _fetch_feat_basic(feat.url, use_cache)
+        return Feat(
+            name=feat.name,
+            url=feat.url,
+            prerequisites=basic.get("prerequisites", ""),
+            source=basic.get("source", ""),
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        feats = list(pool.map(_enrich, stubs))
 
     logger.info(f"Fetched {len(feats)} feats")
     return feats
+
+
+def _fetch_feat_basic(url: str, use_cache: bool = True) -> dict[str, str]:
+    """Extract prerequisites and source from a feat page for listing enrichment."""
+    try:
+        soup = _fetch(url, use_cache)
+    except RuntimeError:
+        return {}
+    content = _main_content(soup)
+    if content is None:
+        return {}
+
+    result: dict[str, str] = {}
+    for p in content.find_all("p"):
+        text = _text(p)
+        if not text:
+            continue
+        low = text.lower()
+        if low.startswith("source:") and "source" not in result:
+            result["source"] = text[len("source:"):].strip()
+        elif low.startswith("prerequisite") and "prerequisites" not in result:
+            first = _first_line(p)
+            result["prerequisites"] = re.sub(r"^prerequisites?:\s*", "", first, flags=re.I)
+        if "source" in result and "prerequisites" in result:
+            break
+    return result
 
 
 @_parse_cache("feat")
@@ -891,9 +984,8 @@ def fetch_feat_detail(url: str, use_cache: bool = True) -> FeatDetail:
             continue
 
         if low.startswith("prerequisite"):
-            detail["prerequisites"] = re.sub(
-                r"^prerequisites?:\s*", "", text, flags=re.I
-            )
+            first = _first_line(p)
+            detail["prerequisites"] = re.sub(r"^prerequisites?:\s*", "", first, flags=re.I)
             continue
 
         md_text = _para_md(p)
