@@ -11,12 +11,29 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path.home() / ".cache" / "dnd-search"
-# Override with DND_CACHE_TTL env var (seconds). Default: 7 days.
-DEFAULT_TTL = int(os.getenv("DND_CACHE_TTL", str(60 * 60 * 24 * 7)))
+
+# Bump this integer whenever the on-disk cache format changes (new keys,
+# restructured content, etc.).  Any entry written under an older version is
+# silently treated as a miss and overwritten.
+CACHE_VERSION = 2
+
+# TTLs — override via env vars (seconds).
+# Raw HTML pages (keyed by bare URL) refresh weekly by default.
+HTML_TTL = int(os.getenv("DND_CACHE_TTL", str(60 * 60 * 24 * 7)))
+# Parsed detail blobs (keyed "prefix:url") are stable; refresh monthly.
+DETAIL_TTL = int(os.getenv("DND_DETAIL_CACHE_TTL", str(60 * 60 * 24 * 30)))
+
+# Maximum number of cache entries before prune() evicts the oldest ones.
+MAX_ENTRIES = int(os.getenv("DND_CACHE_MAX_ENTRIES", "500"))
 
 
 def _cache_path(key: str) -> Path:
     return CACHE_DIR / f"{hashlib.md5(key.encode()).hexdigest()}.json"
+
+
+def _ttl_for(key: str) -> int:
+    """Return the appropriate TTL based on whether this is a parsed-detail key."""
+    return DETAIL_TTL if ":" in key else HTML_TTL
 
 
 def get(key: str) -> str | None:
@@ -25,7 +42,11 @@ def get(key: str) -> str | None:
         return None
     try:
         data = json.loads(path.read_text())
-        if time.time() - data["timestamp"] > DEFAULT_TTL:
+        if data.get("v", 1) != CACHE_VERSION:
+            logger.debug(f"Cache version mismatch for {key}, evicting")
+            path.unlink(missing_ok=True)
+            return None
+        if time.time() - data["timestamp"] > _ttl_for(key):
             logger.debug(f"Cache expired for {key}")
             path.unlink(missing_ok=True)
             return None
@@ -44,11 +65,55 @@ def set(key: str, content: str) -> None:
     try:
         compressed = gzip.compress(content.encode()).hex()
         path.write_text(
-            json.dumps({"timestamp": time.time(), "content": compressed, "gz": True})
+            json.dumps({
+                "v": CACHE_VERSION,
+                "timestamp": time.time(),
+                "content": compressed,
+                "gz": True,
+            })
         )
         logger.debug(f"Cached response for {key}")
     except OSError as e:
         logger.warning(f"Failed to write cache: {e}")
+
+
+def prune() -> int:
+    """Delete expired entries and, if still over MAX_ENTRIES, evict oldest first.
+
+    Returns the number of files removed.
+    """
+    if not CACHE_DIR.exists():
+        return 0
+    now = time.time()
+    removed = 0
+    entries: list[tuple[float, Path]] = []  # (timestamp, path)
+
+    for f in CACHE_DIR.glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+            if data.get("v", 1) != CACHE_VERSION:
+                f.unlink(missing_ok=True)
+                removed += 1
+                continue
+            age = now - data["timestamp"]
+            # Use the longer TTL conservatively — we don't know the original key.
+            if age > HTML_TTL:
+                f.unlink(missing_ok=True)
+                removed += 1
+            else:
+                entries.append((data["timestamp"], f))
+        except (json.JSONDecodeError, KeyError, OSError):
+            f.unlink(missing_ok=True)
+            removed += 1
+
+    # Evict oldest entries if still over the size cap.
+    if len(entries) > MAX_ENTRIES:
+        entries.sort()  # ascending by timestamp → oldest first
+        for _, f in entries[: len(entries) - MAX_ENTRIES]:
+            f.unlink(missing_ok=True)
+            removed += 1
+
+    return removed
 
 
 def clear() -> int:
@@ -74,7 +139,7 @@ def stats() -> dict:
             age = now - data["timestamp"]
             ages.append(age)
             total_bytes += f.stat().st_size
-            if age > DEFAULT_TTL:
+            if age > HTML_TTL:
                 expired += 1
             count += 1
         except (json.JSONDecodeError, KeyError, OSError):

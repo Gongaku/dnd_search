@@ -1,20 +1,44 @@
 """Web scraper for dnd5e.wikidot.com."""
 
+import concurrent.futures
 import json
 import logging
 import re
+from dataclasses import asdict
 from functools import lru_cache, wraps
-from typing import Any
+from typing import Any, Callable, TypeVar, cast
+
+_DetailT = TypeVar("_DetailT")
 
 import requests
 from bs4 import BeautifulSoup, Tag
 
 from dnd_search import cache
-from dnd_search.models import DnDClass, Feat, Item, Race, Spell, Subclass
+from dnd_search.models import (
+    ClassDetail,
+    ClassFeatures,
+    DnDClass,
+    Feat,
+    FeatDetail,
+    Feature,
+    Item,
+    ItemDetail,
+    Race,
+    RaceDetail,
+    Spell,
+    SpellDetail,
+    SpellTableEntry,
+    Subclass,
+    SubclassDetailDict,
+    SubclassEntry,
+    SubraceDetail,
+    Trait,
+)
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://dnd5e.wikidot.com"
+MAX_WORKERS = 8  # Global thread ceiling for all ThreadPoolExecutor usage
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "dnd-search-cli/0.1 (educational tool)"})
 
@@ -30,6 +54,25 @@ _LEVEL_MAP = {
     "8th level": 8,
     "9th level": 9,
 }
+
+# Compiled regex patterns
+_RE_MULTI_SPACE = re.compile(r" {2,}")
+_RE_LEVEL_SCHOOL = re.compile(r"^\d+(st|nd|rd|th)-level", re.I)
+_RE_CANTRIP = re.compile(r"^\w+\s+cantrip\b|^cantrip$", re.I)
+_RE_SPELL_LISTS = re.compile(r"^spell lists?\.", re.I)
+_RE_AT_HIGHER = re.compile(r"^at higher levels", re.I)
+_RE_HIT_DIE = re.compile(r"\d*(d\d+)", re.I)
+_RE_ORDINAL_IN_TEXT = re.compile(r"\b(\d+)(st|nd|rd|th)\b", re.I)
+_RE_LEVEL_IN_TEXT = re.compile(r"\bat\s+(\d+)(st|nd|rd|th)\s+level\b", re.I)
+_RE_MULTICLASS_TWO = re.compile(
+    r"must have (?:a |an )?(\w+) score and (?:a |an )?(\w+) score of (\d+)?", re.I
+)
+_RE_MULTICLASS_ONE = re.compile(
+    r"must have (?:a |an )?(\w+(?: or \w+)?)\s+score of (\d+)", re.I
+)
+_RE_SIZE = re.compile(r"\bYour size is (\w+)", re.I)
+_RE_SPEED = re.compile(r"\b(\d+ feet)\b")
+_RE_DC_SCHOOL = re.compile(r"\s*DC\b.*$", re.I)
 
 
 @lru_cache(maxsize=256)
@@ -72,12 +115,12 @@ def _parse_cache(prefix: str):
     On a warm cache hit the function body is skipped entirely — only json.loads runs.
     The cache key is "{prefix}:{url}" so it never collides with raw HTML entries.
     """
-    def decorator(fn):
+    def decorator(fn: Callable[..., _DetailT]) -> Callable[..., _DetailT]:
         @wraps(fn)
-        def wrapper(url: str, use_cache: bool = True) -> dict[str, Any]:
+        def wrapper(url: str, use_cache: bool = True) -> _DetailT:
             key = f"{prefix}:{url}"
             if use_cache and (hit := cache.get(key)):
-                return json.loads(hit)
+                return json.loads(hit)  # type: ignore[return-value]
             result = fn(url, use_cache)
             if use_cache:
                 cache.set(key, json.dumps(result))
@@ -95,10 +138,10 @@ def _main_content(soup: BeautifulSoup) -> Tag | None:
 def _text(tag: Tag | None) -> str:
     if tag is None:
         return ""
-    return re.sub(r" {2,}", " ", tag.get_text(separator=" ", strip=True))
+    return _RE_MULTI_SPACE.sub(" ", tag.get_text(separator=" ", strip=True))
 
 
-def _parse_granted_spells(table: Tag) -> list[dict[str, str]] | None:
+def _parse_granted_spells(table: Tag) -> list[SpellTableEntry] | None:
     """Parse a granted-spells table (e.g. Oath Spells, Expanded Spell List).
     Returns a list of {"level": str, "spells": str} dicts, or None if the
     table doesn't look like a spell list."""
@@ -144,21 +187,42 @@ def _parse_granted_spells(table: Tag) -> list[dict[str, str]] | None:
     return entries or None
 
 
-def _para_md(el) -> str:
-    """Render element content as markdown, converting <a> tags to [text](url) links."""
+def _para_inline(el, bold: tuple[str, str], italic: tuple[str, str], links: bool = False) -> str:
+    """Render element children with inline formatting.
+
+    bold/italic are (open, close) tag pairs, e.g. ("**", "**") for markdown
+    or ("[bold]", "[/bold]") for Rich. Set links=True to render <a> as markdown links.
+    """
     parts = []
     for child in el.children:
-        if getattr(child, "name", None) == "a":
+        name = getattr(child, "name", None)
+        if links and name == "a":
             href = str(child.get("href", ""))
-            link_text = re.sub(r" {2,}", " ", child.get_text(separator=" ", strip=True))
+            link_text = _RE_MULTI_SPACE.sub(" ", child.get_text(separator=" ", strip=True))
             if href.startswith("/"):
                 href = BASE_URL + href
             parts.append(f"[{link_text}]({href})" if link_text else "")
+        elif name in ("strong", "b"):
+            inner = _para_inline(child, bold, italic, links)
+            parts.append(f"{bold[0]}{inner}{bold[1]}")
+        elif name in ("em", "i"):
+            inner = _para_inline(child, bold, italic, links)
+            parts.append(f"{italic[0]}{inner}{italic[1]}")
         elif hasattr(child, "get_text"):
             parts.append(child.get_text(separator=" "))
         else:
             parts.append(str(child))
-    return re.sub(r" {2,}", " ", "".join(parts).strip())
+    return _RE_MULTI_SPACE.sub(" ", "".join(parts).strip())
+
+
+def _para_md(el) -> str:
+    """Render element content as markdown, preserving links and bold/italic."""
+    return _para_inline(el, bold=("**", "**"), italic=("*", "*"), links=True)
+
+
+def _para_rich(el) -> str:
+    """Render element content as Rich markup, preserving bold/italic."""
+    return _para_inline(el, bold=("[bold]", "[/bold]"), italic=("[italic]", "[/italic]"))
 
 
 def _href(tag: Tag | None) -> str:
@@ -204,11 +268,9 @@ def _parse_spell_table(table: Tag, level: int) -> list[Spell]:
         name = _text(name_cell)
         url = _href(link) if link else ""
 
-        school = re.sub(
-            r"\s*DC\b.*$",
+        school = _RE_DC_SCHOOL.sub(
             "",
             _text(cells[col["school"]]) if col["school"] < len(cells) else "",
-            flags=re.I,
         ).strip()
         casting_time = (
             _text(cells[col["casting_time"]])
@@ -317,13 +379,13 @@ def fetch_spells_for_class(class_name: str, use_cache: bool = True) -> list[str]
 
 
 @_parse_cache("spell")
-def fetch_spell_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
+def fetch_spell_detail(url: str, use_cache: bool = True) -> SpellDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return {}
+        return cast(SpellDetail, {})
 
-    detail: dict[str, Any] = {
+    detail: SpellDetail = {
         "source": "",
         "description": "",
         "description_md": "",
@@ -345,9 +407,8 @@ def fetch_spell_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
 
         # "3rd-level evocation" / "Evocation cantrip" — level+school line, skip
         if (
-            re.match(r"^\d+(st|nd|rd|th)-level", text, re.I)
-            or re.match(r"^\w+\s+cantrip\b", text, re.I)
-            or re.match(r"^cantrip$", text, re.I)
+            _RE_LEVEL_SCHOOL.match(text)
+            or _RE_CANTRIP.match(text)
         ):
             continue
 
@@ -356,13 +417,13 @@ def fetch_spell_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
             continue
 
         # "Spell Lists. Sorcerer, Wizard" or "Spell List. Wizard"
-        if re.match(r"^spell lists?\.", text, re.I):
+        if _RE_SPELL_LISTS.match(text):
             after = re.split(r"\.\s*", text, maxsplit=1)[-1]
             detail["classes"] = [c.strip() for c in after.split(",") if c.strip()]
             continue
 
         # "At Higher Levels." — separate section
-        if re.match(r"^at higher levels", low):
+        if _RE_AT_HIGHER.match(low):
             detail["at_higher_levels"] = text
             detail["at_higher_levels_md"] = _para_md(p)
             continue
@@ -429,13 +490,13 @@ def fetch_classes(use_cache: bool = True) -> list[DnDClass]:
 
 
 @_parse_cache("class")
-def fetch_class_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
+def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return {}
+        return cast(ClassDetail, {})
 
-    detail: dict[str, Any] = {"hit_die": "", "primary_ability": "", "saving_throws": ""}
+    detail: ClassDetail = {"hit_die": "", "primary_ability": "", "saving_throws": "", "description": "", "subclasses": []}
     paragraphs: list[str] = []
 
     # Single pass: collect description paragraphs and parse <strong>Key:</strong> value pairs.
@@ -468,9 +529,9 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
                     break
                 value_parts.append(str(sib))
                 j += 1
-            value = re.sub(r"\s+", " ", "".join(value_parts)).strip().strip(":")
+            value = " ".join("".join(value_parts).split()).strip(":")
             if label == "hit dice":
-                m = re.search(r"\d*(d\d+)", value, re.I)
+                m = _RE_HIT_DIE.search(value)
                 detail["hit_die"] = m.group(1) if m else value
             elif label == "saving throws":
                 detail["saving_throws"] = value
@@ -481,21 +542,13 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     # Extract primary ability from multi-classing prerequisite text.
     # This text may appear in <p>, <em>, or other elements — search full content.
     full_text = content.get_text(" ", strip=True)
-    m2 = re.search(
-        r"must have (?:a |an )?(\w+) score and (?:a |an )?(\w+) score of (\d+)?",
-        full_text,
-        re.I,
-    )
+    m2 = _RE_MULTICLASS_TWO.search(full_text)
     if m2:
         detail["primary_ability"] = (
             f"{m2.group(1)} {m2.group(3)}+ and {m2.group(2)} {m2.group(3)}+"
         )
     else:
-        m1 = re.search(
-            r"must have (?:a |an )?(\w+(?: or \w+)?)\s+score of (\d+)",
-            full_text,
-            re.I,
-        )
+        m1 = _RE_MULTICLASS_ONE.search(full_text)
         if m1:
             detail["primary_ability"] = f"{m1.group(1)} {m1.group(2)}+"
 
@@ -519,75 +572,47 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     return detail
 
 
-def fetch_class_features(class_name: str, use_cache: bool = True) -> dict[str, Any]:
-    """Fetch the full level progression table and feature descriptions for a class."""
-    slug = class_name.lower().strip()
-    url = f"{BASE_URL}/{slug}"
-    key = f"class_features:{slug}"
-    if use_cache and (hit := cache.get(key)):
-        return json.loads(hit)
-    soup = _fetch(url, use_cache)
-    content = _main_content(soup)
-    if content is None:
-        return {}
+def _parse_progression_table(table: Tag) -> tuple[list[str], list[list[str]]]:
+    """Parse a class progression table into (headers, level_rows)."""
+    rows = table.find_all("tr")
+    header_idx = 0
+    for i, row in enumerate(rows):
+        if "Level" in [c.get_text(strip=True) for c in row.find_all(["th", "td"])]:
+            header_idx = i
+            break
+    headers = [c.get_text(strip=True) for c in rows[header_idx].find_all(["th", "td"])]
+    level_rows = [
+        [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
+        for row in rows[header_idx + 1:]
+        if (cells := row.find_all(["td", "th"])) and cells[0].get_text(strip=True)
+    ]
+    return headers, level_rows
 
-    result: dict[str, Any] = {"class_name": slug.title(), "url": url}
 
-    # ------------------------------------------------------------------
-    # Parse the progression table (first table on the page)
-    # Row 0 is the title/subtitle row; scan for the row containing "Level"
-    # ------------------------------------------------------------------
-    tables = content.find_all("table")
-    if tables:
-        prog_table = tables[0]
-        rows = prog_table.find_all("tr")
+def _parse_subclass_table(table: Tag) -> list[SubclassEntry]:
+    """Parse a subclass list table into a list of {name, url, source} dicts."""
+    subclasses = []
+    for row in table.find_all("tr")[1:]:
+        cells = row.find_all(["td", "th"])
+        if cells:
+            link = cells[0].find("a")
+            sub_name = _text(cells[0])
+            if sub_name:
+                subclasses.append({
+                    "name": sub_name,
+                    "url": _href(link) if link else "",
+                    "source": _text(cells[1]) if len(cells) > 1 else "",
+                })
+    return subclasses
 
-        header_idx = 0
-        for i, row in enumerate(rows):
-            texts = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
-            if "Level" in texts:
-                header_idx = i
-                break
 
-        headers = [
-            c.get_text(strip=True) for c in rows[header_idx].find_all(["th", "td"])
-        ]
-        level_rows: list[list[str]] = []
-        for row in rows[header_idx + 1 :]:
-            cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
-            if cells and cells[0]:  # skip empty rows
-                level_rows.append(cells)
-
-        result["table_headers"] = headers
-        result["table_rows"] = level_rows
-
-        # Second table (if present) is the subclass list — skip for features
-        if len(tables) > 1:
-            sub_table = tables[1]
-            subclasses = []
-            sub_rows = sub_table.find_all("tr")
-            for row in sub_rows[1:]:
-                cells = row.find_all(["td", "th"])
-                if cells:
-                    link = cells[0].find("a")
-                    sub_name = _text(cells[0])
-                    sub_url = _href(link) if link else ""
-                    source = _text(cells[1]) if len(cells) > 1 else ""
-                    if sub_name:
-                        subclasses.append(
-                            {"name": sub_name, "url": sub_url, "source": source}
-                        )
-            result["subclasses"] = subclasses
-
-    # ------------------------------------------------------------------
-    # Parse class feature descriptions (h3 headings + their paragraphs/lists)
-    # These follow the progression table in the document.
-    # ------------------------------------------------------------------
-    features: list[dict[str, Any]] = []
-    current: dict[str, Any] | None = None
+def _parse_feature_descriptions(content: Tag) -> list[Feature]:
+    """Parse h3/h4 feature headings and their body blocks from class page content."""
+    features: list[Feature] = []
+    current: Feature | None = None
     past_table = False
 
-    for el in content.find_all(["table", "h1", "h2", "h3", "h4", "p", "ul", "ol"]):
+    for el in content.find_all(["table", "h1", "h2", "h3", "h4", "h5", "p", "ul", "ol"]):
         if el.name == "table":
             past_table = True
             continue
@@ -598,8 +623,7 @@ def fetch_class_features(class_name: str, use_cache: bool = True) -> dict[str, A
         if not text:
             continue
 
-        # h1/h2 are section dividers (e.g. "Class Features"), not individual features.
-        # Flush any open feature but don't start a new one from them.
+        # h1/h2 are section dividers — flush open feature but don't start a new one
         if el.name in ("h1", "h2"):
             if current:
                 features.append(current)
@@ -610,10 +634,12 @@ def fetch_class_features(class_name: str, use_cache: bool = True) -> dict[str, A
             if current:
                 features.append(current)
             current = {"name": text, "level": None, "body": []}
-            # Try to infer unlock level from heading text (e.g. "Extra Attack (5th Level)")
-            m = re.search(r"\b(\d+)(st|nd|rd|th)\b", text, re.I)
+            m = _RE_ORDINAL_IN_TEXT.search(text)
             if m:
                 current["level"] = int(m.group(1))
+
+        elif el.name == "h5" and current is not None:
+            current["body"].append({"type": "heading", "text": text})
 
         elif el.name in ("p", "ul", "ol") and current is not None:
             if el.name in ("ul", "ol"):
@@ -622,17 +648,42 @@ def fetch_class_features(class_name: str, use_cache: bool = True) -> dict[str, A
                     current["body"].append({"type": "list", "items": items})
             else:
                 current["body"].append(
-                    {"type": "paragraph", "text": text, "text_md": _para_md(el)}
+                    {"type": "paragraph", "text": text, "text_md": _para_md(el), "text_rich": _para_rich(el)}
                 )
-                # Try to infer level from paragraph text if not already found
                 if current["level"] is None:
-                    m = re.search(r"\bat\s+(\d+)(st|nd|rd|th)\s+level\b", text, re.I)
+                    m = _RE_LEVEL_IN_TEXT.search(text)
                     if m:
                         current["level"] = int(m.group(1))
 
     if current:
         features.append(current)
+    return features
 
+
+def fetch_class_features(class_name: str, use_cache: bool = True) -> ClassFeatures:
+    """Fetch the full level progression table and feature descriptions for a class."""
+    slug = class_name.lower().strip()
+    url = f"{BASE_URL}/{slug}"
+    key = f"class_features:{slug}"
+    if use_cache and (hit := cache.get(key)):
+        return cast(ClassFeatures, json.loads(hit))
+
+    soup = _fetch(url, use_cache)
+    content = _main_content(soup)
+    if content is None:
+        return cast(ClassFeatures, {})
+
+    result: ClassFeatures = {"class_name": slug.title(), "url": url}
+
+    tables = content.find_all("table")
+    if tables:
+        headers, level_rows = _parse_progression_table(tables[0])
+        result["table_headers"] = headers
+        result["table_rows"] = level_rows
+        if len(tables) > 1:
+            result["subclasses"] = _parse_subclass_table(tables[1])
+
+    features = _parse_feature_descriptions(content)
     result["features"] = features
     logger.info(f"Fetched {len(features)} features for {slug}")
     if use_cache:
@@ -660,16 +711,19 @@ def fetch_subclasses(
     # Determine which base classes to scan
     target_classes = [class_name.lower()] if class_name else list(_BASE_CLASSES)
 
-    # Build a URL→source map from each relevant class page's subclass table
+    # Build a URL→source map from each relevant class page's subclass table.
+    # fetch_class_detail is used here (not fetch_class_features) to avoid
+    # parsing full progression tables and feature descriptions just for source data.
     source_map: dict[str, str] = {}
     for cls in target_classes:
         try:
-            data = fetch_class_features(cls, use_cache)
+            cls_url = f"{BASE_URL}/{cls}"
+            data = fetch_class_detail(cls_url, use_cache)
             for entry in data.get("subclasses", []):
                 if entry.get("url") and entry.get("source"):
                     source_map[entry["url"]] = entry["source"]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not fetch subclass sources for {cls}: {e}")
 
     for name, href in links:
         slug = href.lstrip("/")
@@ -706,26 +760,25 @@ def fetch_subclasses(
 
     logger.info(f"Fetched {len(subclasses)} subclasses")
     if use_cache:
-        from dataclasses import asdict
         cache.set(_key, json.dumps([asdict(s) for s in subclasses]))
     return subclasses
 
 
 @_parse_cache("subclass")
-def fetch_subclass_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
+def fetch_subclass_detail(url: str, use_cache: bool = True) -> SubclassDetailDict:
     """Fetch full detail for a single subclass page."""
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return {}
+        return cast(SubclassDetailDict, {})
 
-    detail: dict[str, Any] = {
+    detail: SubclassDetailDict = {
         "source": "",
         "description": "",
         "description_md": "",
         "features": [],
     }
-    current: dict[str, Any] | None = None
+    current: Feature | None = None
 
     for el in content.find_all(["h1", "h2", "h3", "h4", "p", "ul", "ol", "table"]):
         tag = el.name
@@ -756,7 +809,7 @@ def fetch_subclass_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
         if tag in ("h3", "h4"):
             if current:
                 detail["features"].append(current)
-            current = {"name": text, "body": []}
+            current = Feature(name=text, body=[])
             continue
 
         if tag == "p":
@@ -765,6 +818,7 @@ def fetch_subclass_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
                 detail["source"] = text[len("source:") :].strip()
                 continue
             md_text = _para_md(el)
+            rich_text = _para_rich(el)
             if current is None:
                 detail["description"] = (detail["description"] + "\n\n" + text).lstrip(
                     "\n"
@@ -774,7 +828,7 @@ def fetch_subclass_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
                 ).lstrip("\n")
             else:
                 current["body"].append(
-                    {"type": "paragraph", "text": text, "text_md": md_text}
+                    {"type": "paragraph", "text": text, "text_md": md_text, "text_rich": rich_text}
                 )
 
         elif tag in ("ul", "ol") and current is not None:
@@ -812,13 +866,13 @@ def fetch_feats(use_cache: bool = True) -> list[Feat]:
 
 
 @_parse_cache("feat")
-def fetch_feat_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
+def fetch_feat_detail(url: str, use_cache: bool = True) -> FeatDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return {}
+        return cast(FeatDetail, {})
 
-    detail: dict[str, Any] = {
+    detail: FeatDetail = {
         "source": "",
         "prerequisites": "",
         "description": "",
@@ -894,18 +948,16 @@ def _fetch_race_basic(url: str, use_cache: bool = True) -> dict[str, str]:
         text = li.get_text(strip=True)
 
         if label == "size" and "size" not in result:
-            m = re.search(r"\bYour size is (\w+)", text, re.I)
+            m = _RE_SIZE.search(text)
             if m:
                 result["size"] = m.group(1).capitalize()
             else:
-                m2 = re.search(
-                    r"\b(Tiny|Small|Medium|Large|Huge|Gargantuan)\b", text, re.I
-                )
+                m2 = re.search(r"\b(Tiny|Small|Medium|Large|Huge|Gargantuan)\b", text, re.I)
                 if m2:
                     result["size"] = m2.group(1).capitalize()
 
         elif label == "speed" and "speed" not in result:
-            m = re.search(r"\b(\d+ feet)\b", text)
+            m = _RE_SPEED.search(text)
             if m:
                 result["speed"] = m.group(1)
 
@@ -913,8 +965,6 @@ def _fetch_race_basic(url: str, use_cache: bool = True) -> dict[str, str]:
 
 
 def fetch_races(use_cache: bool = True) -> list[Race]:
-    import concurrent.futures
-
     # Collect all /lineage:xxx links from the /lineage index page
     soup = _fetch(f"{BASE_URL}/lineage", use_cache)
     content = _main_content(soup)
@@ -952,14 +1002,14 @@ def fetch_races(use_cache: bool = True) -> list[Race]:
             source=basic.get("source", ""),
         )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         races = list(pool.map(_enrich, stubs))
 
     logger.info(f"Fetched {len(races)} races")
     return races
 
 
-def _parse_trait_li(li: Tag) -> dict[str, str]:
+def _parse_trait_li(li: Tag) -> Trait:
     """Parse a <li><strong>Name.</strong> Description</li> into {"name": ..., "text": ...}."""
     strong = li.find("strong")
     if strong:
@@ -975,15 +1025,15 @@ def _parse_trait_li(li: Tag) -> dict[str, str]:
 
 
 @_parse_cache("race")
-def fetch_race_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
+def fetch_race_detail(url: str, use_cache: bool = True) -> RaceDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return {}
+        return cast(RaceDetail, {})
 
     # Result structure mirrors the page hierarchy:
     # base (before first h2) + subraces (one dict per h2)
-    result: dict[str, Any] = {
+    result: RaceDetail = {
         "source": "",
         "description": "",
         "description_md": "",
@@ -994,7 +1044,7 @@ def fetch_race_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     current_source = ""
     first_h1 = True
     # current_target points to either result (base) or current subrace dict
-    current_target: dict[str, Any] = result
+    current_target: RaceDetail | SubraceDetail = result
 
     for el in content.find_all(["h1", "h2", "p", "ul", "ol", "table"]):
         tag = el.name
@@ -1012,7 +1062,7 @@ def fetch_race_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
                 # Subsequent source sections get their own container so that
                 # traits between this h1 and the next h2 aren't absorbed into
                 # the base section.
-                section: dict[str, Any] = {
+                section: SubraceDetail = {
                     "name": current_source,
                     "source": current_source,
                     "description": "",
@@ -1024,7 +1074,7 @@ def fetch_race_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
             continue
 
         if tag == "h2":
-            subrace: dict[str, Any] = {
+            subrace: SubraceDetail = {
                 "name": text,
                 "source": current_source,
                 "description": "",
@@ -1055,7 +1105,8 @@ def fetch_race_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
         if tag == "table":
             spell_entries = _parse_granted_spells(el)
             if spell_entries:
-                current_target.setdefault("spell_table", []).extend(spell_entries)
+                # spell_table only appears on subrace sections, not the base result
+                cast(SubraceDetail, current_target).setdefault("spell_table", []).extend(spell_entries)
             continue
 
         if tag in ("ul", "ol"):
@@ -1174,13 +1225,13 @@ def fetch_items(use_cache: bool = True) -> list[Item]:
 
 
 @_parse_cache("item")
-def fetch_item_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
+def fetch_item_detail(url: str, use_cache: bool = True) -> ItemDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return {}
+        return cast(ItemDetail, {})
 
-    detail: dict[str, Any] = {"source": "", "description": ""}
+    detail: ItemDetail = {"source": "", "description": ""}
 
     for p in content.find_all("p"):
         text = p.get_text(strip=True)

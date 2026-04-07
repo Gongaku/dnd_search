@@ -3,6 +3,7 @@
 import json
 import logging
 import textwrap
+from collections.abc import Mapping
 from typing import Any
 
 from rich.console import Console
@@ -18,13 +19,13 @@ console = Console()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+_ORDINAL_SUFFIX = {1: "st", 2: "nd", 3: "rd"}
 
 
 def _level_str(level: int) -> str:
     if level == 0:
         return "Cantrip"
-    suffixes = {1: "st", 2: "nd", 3: "rd"}
-    suffix = suffixes.get(level, "th")
+    suffix = _ORDINAL_SUFFIX.get(level, "th")
     return f"{level}{suffix} Level"
 
 
@@ -43,8 +44,6 @@ def _rarity_color(rarity: str) -> str:
 # ---------------------------------------------------------------------------
 # JSON format
 # ---------------------------------------------------------------------------
-
-
 def _to_dict(obj: Any) -> dict:
     if hasattr(obj, "__dataclass_fields__"):
         return {k: getattr(obj, k) for k in obj.__dataclass_fields__}
@@ -58,7 +57,6 @@ def output_json(items: list) -> None:
 # ---------------------------------------------------------------------------
 # Shared plain-text / markdown helpers
 # ---------------------------------------------------------------------------
-
 _WRAP = 80
 
 
@@ -120,8 +118,7 @@ def _phb_level(level: int) -> str:
     """Return PHB-style level string: 'cantrip', '1st-level', '3rd-level', …"""
     if level == 0:
         return "cantrip"
-    sfx = {1: "st", 2: "nd", 3: "rd"}
-    return f"{level}{sfx.get(level, 'th')}-level"
+    return _level_str(level).lower().replace(" ", "-")
 
 
 def _tags(spell: "Spell") -> str:
@@ -133,11 +130,104 @@ def _tags(spell: "Spell") -> str:
     return ", ".join(parts)
 
 
+_ORDINAL_CHARS = "stndrh"
+
+
+def _parse_level_int(cell: str) -> int | None:
+    """Parse '1st', '2nd' … '20th' to int; return None on failure."""
+    try:
+        return int(cell.rstrip(_ORDINAL_CHARS).strip())
+    except ValueError:
+        return None
+
+
+def _spell_tag_list(spell: "Spell") -> list[str]:
+    """Return display-ready tag strings for ritual/concentration."""
+    return (["Ritual"] if spell.ritual else []) + (
+        ["Concentration"] if spell.concentration else []
+    )
+
+
+def _rich_field(label: str, value: str) -> str | None:
+    """Return a rich-markup '[bold]Label:[/bold] value' line, or None if value is empty."""
+    return f"[bold]{label}:[/bold] {value}" if value else None
+
+
+def _render_blocks_rich(blocks: list, *, detect_dc: bool = False) -> list[str]:
+    """Convert FeatureBlocks to rich-markup display lines."""
+    parts: list[str] = []
+    for i, block in enumerate(blocks):
+        btype = block["type"]
+        if btype == "heading":
+            parts.append(f"[bold magenta]{block.get('text', '')}[/bold magenta]")
+        elif btype == "paragraph":
+            plain = block.get("text", "")
+            low = plain.lower()
+            if detect_dc and (
+                low.startswith("spell save dc")
+                or low.startswith("spell attack modifier")
+            ):
+                label, _, value = plain.partition("=")
+                parts.append(
+                    f"  [bold yellow]{label.strip()}[/bold yellow]"
+                    + (
+                        f" [dim]=[/dim] [italic]{value.strip()}[/italic]"
+                        if value
+                        else ""
+                    )
+                )
+            else:
+                parts.append(block.get("text_rich") or plain)
+            if i < len(blocks) - 1:
+                parts.append("")
+        elif btype == "list":
+            for item in block.get("items", []):
+                parts.append(f"  • {item}")
+    return parts
+
+
+def _print_blocks_md(blocks: list) -> None:
+    """Print FeatureBlocks as markdown."""
+    for block in blocks:
+        btype = block["type"]
+        if btype == "paragraph":
+            print(block.get("text_md") or block.get("text", ""))
+            print()
+        elif btype == "list":
+            for item in block.get("items", []):
+                print(f"- {item}")
+            print()
+
+
+def _print_blocks_plain(blocks: list) -> None:
+    """Print FeatureBlocks as plain text."""
+    for block in blocks:
+        btype = block["type"]
+        if btype == "paragraph":
+            print(_wrap(block.get("text", "")))
+            print()
+        elif btype == "list":
+            for item in block.get("items", []):
+                print(_wrap(item, indent="  * ", hang="    "))
+            print()
+
+
+def _fmt_trait_md(trait: dict) -> str:
+    name = trait.get("name", "")
+    text = trait.get("text", "")
+    return f"- **{name}.** {text}" if name else f"- {text}"
+
+
+def _fmt_trait_plain(trait: dict) -> str:
+    name = trait.get("name", "")
+    text = trait.get("text", "")
+    label = f"{name}. " if name else ""
+    return _wrap(label + text, indent="  * ", hang="    ")
+
+
 # ---------------------------------------------------------------------------
 # Spell formatters
 # ---------------------------------------------------------------------------
-
-
 def format_spells_table(spells: list[Spell], show_url: bool = False) -> None:
     if not spells:
         console.print("[yellow]No spells found.[/yellow]")
@@ -181,7 +271,7 @@ def format_spells_table(spells: list[Spell], show_url: bool = False) -> None:
     console.print(table)
 
 
-def format_spell_detail(spell: Spell, detail: dict) -> None:
+def format_spell_detail(spell: Spell, detail: Mapping[str, Any]) -> None:
     title = f"[bold cyan]{spell.name}[/bold cyan]"
     spell_tag = ""
     if spell.ritual:
@@ -217,16 +307,14 @@ def format_spell_detail(spell: Spell, detail: dict) -> None:
         lines.append("")
         lines.append(f"[bold]Spell Lists:[/bold] {', '.join(detail['classes'])}")
 
-    console.print(Panel("\n".join(lines), title=title, border_style="cyan"))
+    console.print(
+        Panel("\n".join(lines), title=title, border_style="cyan", title_align="left")
+    )
 
 
 def format_spells_text(spells: list[Spell]) -> None:
     for spell in spells:
-        tags = []
-        if spell.ritual:
-            tags.append("Ritual")
-        if spell.concentration:
-            tags.append("Concentration")
+        tags = _spell_tag_list(spell)
         tag_str = f" [{', '.join(tags)}]" if tags else ""
         console.print(
             f"[bold cyan]{spell.name}[/bold cyan]{tag_str} - "
@@ -238,8 +326,6 @@ def format_spells_text(spells: list[Spell]) -> None:
 # ---------------------------------------------------------------------------
 # Class formatters
 # ---------------------------------------------------------------------------
-
-
 def format_classes_table(classes: list[DnDClass], show_detail: bool = False) -> None:
     if not classes:
         console.print("[yellow]No classes found.[/yellow]")
@@ -263,16 +349,17 @@ def format_classes_table(classes: list[DnDClass], show_detail: bool = False) -> 
     console.print(table)
 
 
-def format_class_detail(cls: DnDClass, detail: dict) -> None:
-    lines = []
-    if cls.hit_die:
-        lines.append(f"[bold]Hit Die:[/bold]         {cls.hit_die}")
-    if cls.saving_throws:
-        lines.append(f"[bold]Saving Throws:[/bold]   {cls.saving_throws}")
-    if cls.primary_ability:
-        lines.append(f"[bold]Primary Ability:[/bold] {cls.primary_ability}")
-    if cls.url:
-        lines.append(f"[bold]URL:[/bold]             [link={cls.url}]{cls.url}[/link]")
+def format_class_detail(cls: DnDClass, detail: Mapping[str, Any]) -> None:
+    lines: list[str] = [
+        line
+        for line in [
+            _rich_field("Hit Die", cls.hit_die),
+            _rich_field("Saving Throws", cls.saving_throws),
+            _rich_field("Primary Ability", cls.primary_ability),
+            f"[bold]URL:[/bold] [link={cls.url}]{cls.url}[/link]" if cls.url else None,
+        ]
+        if line
+    ]
     if detail.get("description"):
         lines.append("")
         lines.append(detail["description"])
@@ -288,6 +375,7 @@ def format_class_detail(cls: DnDClass, detail: dict) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{cls.name}[/bold cyan]",
             border_style="cyan",
+            title_align="left",
         )
     )
 
@@ -301,8 +389,6 @@ def format_classes_text(classes: list[DnDClass]) -> None:
 # ---------------------------------------------------------------------------
 # Subclass formatters
 # ---------------------------------------------------------------------------
-
-
 def format_subclasses_table(subclasses: list[Subclass], show_url: bool = False) -> None:
     if not subclasses:
         console.print("[yellow]No subclasses found.[/yellow]")
@@ -338,34 +424,32 @@ def format_subclasses_text(subclasses: list[Subclass]) -> None:
         console.print(f"[bold cyan]{sub.name}[/bold cyan]{cls_str}")
 
 
-def format_subclass_detail(sub: Subclass, detail: dict) -> None:
-    lines = []
-    if sub.url:
-        lines.append(f"[bold]URL:[/bold]    [link={sub.url}]{sub.url}[/link]")
+def format_subclass_detail(sub: Subclass, detail: Mapping[str, Any]) -> None:
     src = detail.get("source") or sub.source
-    if src:
-        lines.append(f"[bold]Source:[/bold] {src}")
-    if sub.parent_class:
-        lines.append(f"[bold]Class:[/bold]  {sub.parent_class}")
+    lines: list[str] = [
+        line
+        for line in [
+            f"[bold]URL:[/bold]    [link={sub.url}]{sub.url}[/link]"
+            if sub.url
+            else None,
+            _rich_field("Source", src),
+            _rich_field("Class", sub.parent_class),
+        ]
+        if line
+    ]
     if detail.get("description"):
-        lines.append("")
-        lines.append(detail["description"])
+        lines += ["", detail["description"]]
     console.print(
         Panel(
             "\n".join(lines),
             title=f"[bold cyan]{sub.name}[/bold cyan]",
             border_style="cyan",
+            title_align="left",
         )
     )
 
     for feat in detail.get("features", []):
-        body_parts: list[str] = []
-        for block in feat.get("body", []):
-            if block["type"] == "paragraph":
-                body_parts.append(block["text"])
-            elif block["type"] == "list":
-                for item in block["items"]:
-                    body_parts.append(f"  • {item}")
+        body_parts = _render_blocks_rich(feat.get("body", []))
         if feat.get("spell_table"):
             if body_parts:
                 body_parts.append("")
@@ -378,6 +462,7 @@ def format_subclass_detail(sub: Subclass, detail: dict) -> None:
                 title=f"[bold cyan]{feat['name']}[/bold cyan]",
                 border_style="bright_black",
                 padding=(0, 1),
+                title_align="left",
             )
         )
 
@@ -385,8 +470,6 @@ def format_subclass_detail(sub: Subclass, detail: dict) -> None:
 # ---------------------------------------------------------------------------
 # Feat formatters
 # ---------------------------------------------------------------------------
-
-
 def format_feats_table(feats: list[Feat], show_url: bool = False) -> None:
     if not feats:
         console.print("[yellow]No feats found.[/yellow]")
@@ -410,15 +493,20 @@ def format_feats_table(feats: list[Feat], show_url: bool = False) -> None:
     console.print(table)
 
 
-def format_feat_detail(feat: Feat, detail: dict) -> None:
-    lines = []
-    if feat.url:
-        lines.append(f"[bold]URL:[/bold]          [link={feat.url}]{feat.url}[/link]")
+def format_feat_detail(feat: Feat, detail: Mapping[str, Any]) -> None:
     src = detail.get("source") or feat.source
-    if src:
-        lines.append(f"[bold]Source:[/bold]       {src}")
     pre = detail.get("prerequisites") or feat.prerequisites or "None"
-    lines.append(f"[bold]Prerequisites:[/bold] {pre}")
+    lines: list[str] = [
+        line
+        for line in [
+            f"[bold]URL:[/bold] [link={feat.url}]{feat.url}[/link]"
+            if feat.url
+            else None,
+            _rich_field("Source", src),
+            _rich_field("Prerequisites", pre),
+        ]
+        if line
+    ]
     if detail.get("description"):
         lines.append("")
         lines.append(detail["description"])
@@ -432,6 +520,7 @@ def format_feat_detail(feat: Feat, detail: dict) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{feat.name}[/bold cyan]",
             border_style="cyan",
+            title_align="left",
         )
     )
 
@@ -445,8 +534,6 @@ def format_feats_text(feats: list[Feat]) -> None:
 # ---------------------------------------------------------------------------
 # Race formatters
 # ---------------------------------------------------------------------------
-
-
 def format_races_table(races: list[Race], show_url: bool = False) -> None:
     if not races:
         console.print("[yellow]No races found.[/yellow]")
@@ -472,22 +559,25 @@ def format_races_table(races: list[Race], show_url: bool = False) -> None:
 
 
 def _fmt_trait_rich(trait: dict) -> str:
-    if trait.get("name"):
-        return f"  • [bold]{trait['name']}.[/bold] {trait['text']}"
-    return f"  • {trait['text']}"
+    name = trait.get("name", "")
+    text = trait.get("text", "")
+    return f"  • [bold]{name}.[/bold] {text}" if name else f"  • {text}"
 
 
-def format_race_detail(race: Race, detail: dict) -> None:
-    lines = []
-    if race.url:
-        lines.append(f"[bold]URL:[/bold]    [link={race.url}]{race.url}[/link]")
+def format_race_detail(race: Race, detail: Mapping[str, Any]) -> None:
     src = detail.get("source") or race.source
-    if src:
-        lines.append(f"[bold]Source:[/bold] {src}")
-    if race.size:
-        lines.append(f"[bold]Size:[/bold]   {race.size}")
-    if race.speed:
-        lines.append(f"[bold]Speed:[/bold]  {race.speed}")
+    lines: list[str] = [
+        line
+        for line in [
+            f"[bold]URL:[/bold] [link={race.url}]{race.url}[/link]"
+            if race.url
+            else None,
+            _rich_field("Source", src),
+            _rich_field("Size", race.size),
+            _rich_field("Speed", race.speed),
+        ]
+        if line
+    ]
     if detail.get("description"):
         lines.append("")
         lines.append(detail["description"])
@@ -518,6 +608,7 @@ def format_race_detail(race: Race, detail: dict) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{race.name}[/bold cyan]",
             border_style="cyan",
+            title_align="left",
         )
     )
 
@@ -531,8 +622,6 @@ def format_races_text(races: list[Race]) -> None:
 # ---------------------------------------------------------------------------
 # Item formatters
 # ---------------------------------------------------------------------------
-
-
 def format_items_table(items: list[Item], show_url: bool = False) -> None:
     if not items:
         console.print("[yellow]No items found.[/yellow]")
@@ -566,20 +655,25 @@ def format_items_table(items: list[Item], show_url: bool = False) -> None:
     console.print(table)
 
 
-def format_item_detail(item: Item, detail: dict) -> None:
-    lines = []
-    if item.url:
-        lines.append(f"[bold]URL:[/bold]        [link={item.url}]{item.url}[/link]")
+def format_item_detail(item: Item, detail: Mapping[str, Any]) -> None:
     src = item.source or detail.get("source", "")
-    if src:
-        lines.append(f"[bold]Source:[/bold]     {src}")
-    if item.item_type:
-        lines.append(f"[bold]Type:[/bold]       {item.item_type}")
-    if item.rarity:
-        color = _rarity_color(item.rarity)
-        lines.append(f"[bold]Rarity:[/bold]     [{color}]{item.rarity}[/{color}]")
+    color = _rarity_color(item.rarity) if item.rarity else "white"
     attune = "Yes" if item.requires_attunement else "No"
-    lines.append(f"[bold]Attunement:[/bold] {attune}")
+    lines: list[str] = [
+        line
+        for line in [
+            f"[bold]URL:[/bold] [link={item.url}]{item.url}[/link]"
+            if item.url
+            else None,
+            _rich_field("Source", src),
+            _rich_field("Type", item.item_type),
+            f"[bold]Rarity:[/bold] [{color}]{item.rarity}[/{color}]"
+            if item.rarity
+            else None,
+            f"[bold]Attunement:[/bold] {attune}",
+        ]
+        if line
+    ]
     if detail.get("description"):
         lines.append("")
         lines.append(detail["description"])
@@ -589,6 +683,7 @@ def format_item_detail(item: Item, detail: dict) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{item.name}[/bold cyan]",
             border_style="cyan",
+            title_align="left",
         )
     )
 
@@ -602,7 +697,6 @@ def format_items_text(items: list[Item]) -> None:
 # ---------------------------------------------------------------------------
 # Class feature formatters
 # ---------------------------------------------------------------------------
-
 # Columns that deserve a distinct color in the progression table
 _COL_STYLES: dict[str, str] = {
     "level": "bold bright_green",
@@ -633,13 +727,8 @@ def _col_style(header: str) -> str:
     return "white"
 
 
-def _is_spell_slot_col(header: str) -> bool:
-    h = header.lower().strip()
-    return len(h) <= 3 and any(h.endswith(s) for s in _RARITY_SUFFIXES)
-
-
 def format_class_progression(
-    data: dict, min_level: int = 1, max_level: int = 20
+    data: Mapping[str, Any], min_level: int = 1, max_level: int = 20
 ) -> None:
     """Render the class level progression table."""
     class_name = data.get("class_name", "Class")
@@ -654,9 +743,10 @@ def format_class_progression(
     filtered = []
     for row in rows:
         try:
-            lvl_raw = row[0].rstrip("stndrh").strip()  # "1st" -> "1"
-            lvl = int(lvl_raw)
-        except (ValueError, IndexError):
+            lvl = _parse_level_int(row[0])
+        except IndexError:
+            continue
+        if lvl is None:
             continue
         if min_level <= lvl <= max_level:
             filtered.append((lvl, row))
@@ -694,7 +784,7 @@ def format_class_progression(
 
 
 def format_class_features(
-    data: dict, name_filter: str = "", show_body: bool = True
+    data: Mapping[str, Any], name_filter: str = "", show_body: bool = True
 ) -> None:
     """Render class feature descriptions."""
     class_name = data.get("class_name", "Class")
@@ -718,25 +808,27 @@ def format_class_features(
         level_str = f" [dim](unlocked at level {level})[/dim]" if level else ""
 
         if not show_body or not feat.get("body"):
-            console.print(f"  [bold cyan]•[/bold cyan] [cyan]{name}[/cyan]{level_str}")
+            console.print(
+                f"  [bold magenta]•[/bold magenta] [magenta]{name}[/magenta]{level_str}"
+            )
             continue
 
-        body_parts: list[str] = []
-        for block in feat["body"]:
-            if block["type"] == "paragraph":
-                body_parts.append(block["text"])
-            elif block["type"] == "list":
-                for item in block["items"]:
-                    body_parts.append(f"  • {item}")
+        body_parts = _render_blocks_rich(feat.get("body", []), detect_dc=True)
 
         body = "\n".join(body_parts)
         title = f"[bold cyan]{name}[/bold cyan]{level_str}"
         console.print(
-            Panel(body, title=title, border_style="bright_black", padding=(0, 1))
+            Panel(
+                body,
+                title=title,
+                border_style="bright_black",
+                padding=(0, 1),
+                title_align="left",
+            )
         )
 
 
-def format_class_subclasses(data: dict) -> None:
+def format_class_subclasses(data: Mapping[str, Any]) -> None:
     """Render the subclass list from class data."""
     class_name = data.get("class_name", "Class")
     subclasses = data.get("subclasses", [])
@@ -759,8 +851,6 @@ def format_class_subclasses(data: dict) -> None:
 # ---------------------------------------------------------------------------
 # Markdown formatters  (PHB-style)
 # ---------------------------------------------------------------------------
-
-
 def format_spells_markdown(spells: list[Spell], detail_map: dict | None = None) -> None:
     detail_map = detail_map or {}
     print(f"## Spells ({len(spells)} result{'s' if len(spells) != 1 else ''})\n")
@@ -790,12 +880,8 @@ def format_spells_markdown(spells: list[Spell], detail_map: dict | None = None) 
     print(_md_table(headers, rows))
 
 
-def format_spell_detail_markdown(spell: Spell, detail: dict) -> None:
-    tags = []
-    if spell.ritual:
-        tags.append("Ritual")
-    if spell.concentration:
-        tags.append("Concentration")
+def format_spell_detail_markdown(spell: Spell, detail: Mapping[str, Any]) -> None:
+    tags = _spell_tag_list(spell)
     tag_str = f" *({', '.join(tags)})*" if tags else ""
     school_line = f"*{_phb_level(spell.level)} {spell.school.lower()}*{tag_str}"
 
@@ -837,7 +923,7 @@ def format_classes_markdown(classes: list[DnDClass]) -> None:
     print(_md_table(headers, rows))
 
 
-def format_class_detail_markdown(cls: DnDClass, detail: dict) -> None:
+def format_class_detail_markdown(cls: DnDClass, detail: Mapping[str, Any]) -> None:
     print(f"# {cls.name}")
     print()
     if cls.hit_die:
@@ -869,7 +955,7 @@ def format_subclasses_markdown(subclasses: list[Subclass]) -> None:
     print(_md_table(headers, rows))
 
 
-def format_subclass_detail_markdown(sub: Subclass, detail: dict) -> None:
+def format_subclass_detail_markdown(sub: Subclass, detail: Mapping[str, Any]) -> None:
     title = f"[{sub.name}]({sub.url})" if sub.url else sub.name
     print(f"# {title}\n")
     src = detail.get("source") or sub.source
@@ -881,14 +967,7 @@ def format_subclass_detail_markdown(sub: Subclass, detail: dict) -> None:
         print(f"\n{detail.get('description_md') or detail['description']}")
     for feat in detail.get("features", []):
         print(f"\n### {feat['name']}\n")
-        for block in feat.get("body", []):
-            if block["type"] == "paragraph":
-                print(block.get("text_md") or block["text"])
-                print()
-            elif block["type"] == "list":
-                for item in block["items"]:
-                    print(f"- {item}")
-                print()
+        _print_blocks_md(feat.get("body", []))
         if feat.get("spell_table"):
             print(
                 _md_table(
@@ -913,7 +992,7 @@ def format_feats_markdown(feats: list[Feat]) -> None:
     print(_md_table(headers, rows))
 
 
-def format_feat_detail_markdown(feat: Feat, detail: dict) -> None:
+def format_feat_detail_markdown(feat: Feat, detail: Mapping[str, Any]) -> None:
     title = f"[{feat.name}]({feat.url})" if feat.url else feat.name
     print(f"# {title}\n")
     src = detail.get("source") or feat.source
@@ -939,7 +1018,7 @@ def format_races_markdown(races: list[Race]) -> None:
     print(_md_table(headers, rows))
 
 
-def format_race_detail_markdown(race: Race, detail: dict) -> None:
+def format_race_detail_markdown(race: Race, detail: Mapping[str, Any]) -> None:
     title = f"[{race.name}]({race.url})" if race.url else race.name
     print(f"# {title}\n")
     src = detail.get("source") or race.source
@@ -954,12 +1033,9 @@ def format_race_detail_markdown(race: Race, detail: dict) -> None:
     if detail.get("traits"):
         print("\n### Racial Traits\n")
         for t in detail["traits"]:
-            if t.get("name"):
-                print(f"- **{t['name']}.** {t['text']}")
-            else:
-                print(f"- {t['text']}")
+            print(_fmt_trait_md(t))
     for subrace in detail.get("subraces", []):
-        print(f"\n## {subrace['name']}")
+        print(f"\n## {subrace.get('name', '')}")
         sub_src = subrace.get("source", "")
         if sub_src and sub_src != src:
             print(f"*{sub_src}*\n")
@@ -968,10 +1044,7 @@ def format_race_detail_markdown(race: Race, detail: dict) -> None:
         if subrace.get("traits"):
             print()
             for t in subrace["traits"]:
-                if t.get("name"):
-                    print(f"- **{t['name']}.** {t['text']}")
-                else:
-                    print(f"- {t['text']}")
+                print(_fmt_trait_md(t))
         if subrace.get("spell_table"):
             print()
             print(
@@ -998,7 +1071,7 @@ def format_items_markdown(items: list[Item]) -> None:
     print(_md_table(headers, rows))
 
 
-def format_item_detail_markdown(item: Item, detail: dict) -> None:
+def format_item_detail_markdown(item: Item, detail: Mapping[str, Any]) -> None:
     title = f"[{item.name}]({item.url})" if item.url else item.name
     print(f"# {title}\n")
     src = item.source or detail.get("source", "")
@@ -1014,7 +1087,7 @@ def format_item_detail_markdown(item: Item, detail: dict) -> None:
 
 
 def format_class_markdown(
-    data: dict,
+    data: Mapping[str, Any],
     min_level: int = 1,
     max_level: int = 20,
     show_table: bool = True,
@@ -1036,10 +1109,10 @@ def format_class_markdown(
         filtered = []
         for row in rows:
             try:
-                lvl = int(row[0].rstrip("stndrh").strip())
-            except (ValueError, IndexError):
+                lvl = _parse_level_int(row[0])
+            except IndexError:
                 continue
-            if min_level <= lvl <= max_level:
+            if lvl is not None and min_level <= lvl <= max_level:
                 filtered.append(row)
         if filtered:
             print(_md_table(headers, filtered))
@@ -1057,14 +1130,7 @@ def format_class_markdown(
             lvl = feat.get("level")
             lvl_note = f" *(unlocked at level {lvl})*" if lvl else ""
             print(f"### {feat['name']}{lvl_note}\n")
-            for block in feat.get("body", []):
-                if block["type"] == "paragraph":
-                    print(block.get("text_md") or block["text"])
-                    print()
-                elif block["type"] == "list":
-                    for item in block["items"]:
-                        print(f"- {item}")
-                    print()
+            _print_blocks_md(feat.get("body", []))
 
     # Subclasses
     if show_subclasses and subclasses:
@@ -1081,8 +1147,6 @@ def format_class_markdown(
 # ---------------------------------------------------------------------------
 # Plain-text formatters  (PHB-style)
 # ---------------------------------------------------------------------------
-
-
 def format_spells_plain(spells: list[Spell], detail_map: dict | None = None) -> None:
     detail_map = detail_map or {}
     print(_plain_h1(f"Spells ({len(spells)} result{'s' if len(spells) != 1 else ''})"))
@@ -1113,12 +1177,8 @@ def format_spells_plain(spells: list[Spell], detail_map: dict | None = None) -> 
     print(_plain_table(headers, rows))
 
 
-def format_spell_detail_plain(spell: Spell, detail: dict) -> None:
-    tags = []
-    if spell.ritual:
-        tags.append("Ritual")
-    if spell.concentration:
-        tags.append("Concentration")
+def format_spell_detail_plain(spell: Spell, detail: Mapping[str, Any]) -> None:
+    tags = _spell_tag_list(spell)
     tag_str = f"  [{', '.join(tags)}]" if tags else ""
 
     print(spell.name)
@@ -1160,7 +1220,7 @@ def format_classes_plain(classes: list[DnDClass]) -> None:
     print(_plain_table(headers, rows))
 
 
-def format_class_detail_plain(cls: DnDClass, detail: dict) -> None:
+def format_class_detail_plain(cls: DnDClass, detail: Mapping[str, Any]) -> None:
     print(_plain_h1(cls.name))
     print()
     if cls.hit_die:
@@ -1197,7 +1257,7 @@ def format_subclasses_plain(subclasses: list[Subclass]) -> None:
     print(_plain_table(headers, rows))
 
 
-def format_subclass_detail_plain(sub: Subclass, detail: dict) -> None:
+def format_subclass_detail_plain(sub: Subclass, detail: Mapping[str, Any]) -> None:
     print(sub.name.upper())
     print("=" * len(sub.name))
     if sub.url:
@@ -1217,14 +1277,7 @@ def format_subclass_detail_plain(sub: Subclass, detail: dict) -> None:
     for feat in detail.get("features", []):
         print(_plain_h2(feat["name"]))
         print()
-        for block in feat.get("body", []):
-            if block["type"] == "paragraph":
-                print(_wrap(block["text"]))
-                print()
-            elif block["type"] == "list":
-                for item in block["items"]:
-                    print(_wrap(item, indent="  * ", hang="    "))
-                print()
+        _print_blocks_plain(feat.get("body", []))
         if feat.get("spell_table"):
             print(
                 _plain_table(
@@ -1243,7 +1296,7 @@ def format_feats_plain(feats: list[Feat]) -> None:
     print(_plain_table(headers, rows))
 
 
-def format_feat_detail_plain(feat: Feat, detail: dict) -> None:
+def format_feat_detail_plain(feat: Feat, detail: Mapping[str, Any]) -> None:
     print(feat.name)
     print("-" * len(feat.name))
     if feat.url:
@@ -1274,7 +1327,7 @@ def format_races_plain(races: list[Race]) -> None:
     print(_plain_table(headers, rows))
 
 
-def format_race_detail_plain(race: Race, detail: dict) -> None:
+def format_race_detail_plain(race: Race, detail: Mapping[str, Any]) -> None:
     print(race.name.upper())
     print("=" * len(race.name))
     if race.url:
@@ -1297,15 +1350,12 @@ def format_race_detail_plain(race: Race, detail: dict) -> None:
         print("RACIAL TRAITS")
         print("-------------")
         for t in detail["traits"]:
-            if t.get("name"):
-                label = f"{t['name']}. "
-                print(_wrap(label + t["text"], indent="  * ", hang="    "))
-            else:
-                print(_wrap(t["text"], indent="  * ", hang="    "))
+            print(_fmt_trait_plain(t))
         print()
     for subrace in detail.get("subraces", []):
-        print(subrace["name"].upper())
-        print("-" * len(subrace["name"]))
+        name = subrace.get("name", "")
+        print(name.upper())
+        print("-" * len(name))
         sub_src = subrace.get("source", "")
         if sub_src and sub_src != src:
             print(f"Source: {sub_src}")
@@ -1318,11 +1368,7 @@ def format_race_detail_plain(race: Race, detail: dict) -> None:
                     print()
         if subrace.get("traits"):
             for t in subrace["traits"]:
-                if t.get("name"):
-                    label = f"{t['name']}. "
-                    print(_wrap(label + t["text"], indent="  * ", hang="    "))
-                else:
-                    print(_wrap(t["text"], indent="  * ", hang="    "))
+                print(_fmt_trait_plain(t))
             print()
         if subrace.get("spell_table"):
             print(
@@ -1353,7 +1399,7 @@ def format_items_plain(items: list[Item]) -> None:
     print(_plain_table(headers, rows))
 
 
-def format_item_detail_plain(item: Item, detail: dict) -> None:
+def format_item_detail_plain(item: Item, detail: Mapping[str, Any]) -> None:
     print(item.name)
     print("-" * len(item.name))
     if item.url:
@@ -1376,7 +1422,7 @@ def format_item_detail_plain(item: Item, detail: dict) -> None:
 
 
 def format_class_plain(
-    data: dict,
+    data: Mapping[str, Any],
     min_level: int = 1,
     max_level: int = 20,
     show_table: bool = True,
@@ -1400,10 +1446,10 @@ def format_class_plain(
         filtered = []
         for row in rows:
             try:
-                lvl = int(row[0].rstrip("stndrh").strip())
-            except (ValueError, IndexError):
+                lvl = _parse_level_int(row[0])
+            except IndexError:
                 continue
-            if min_level <= lvl <= max_level:
+            if lvl is not None and min_level <= lvl <= max_level:
                 filtered.append(row)
         if filtered:
             print(_plain_table(headers, filtered))
@@ -1423,14 +1469,7 @@ def format_class_plain(
             lvl_note = f"  (unlocked at level {lvl})" if lvl else ""
             print(_plain_h2(f"{feat['name']}{lvl_note}"))
             print()
-            for block in feat.get("body", []):
-                if block["type"] == "paragraph":
-                    print(_wrap(block["text"]))
-                    print()
-                elif block["type"] == "list":
-                    for item in block["items"]:
-                        print(_wrap(item, indent="  * ", hang="    "))
-                    print()
+            _print_blocks_plain(feat.get("body", []))
 
     # Subclasses
     if show_subclasses and subclasses:

@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "dnd-search"
 version = "0.1.0"
 description = "CLI tool for searching D&D 5e content from dnd5e.wikidot.com"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1",
@@ -17,3 +18,9 @@ dependencies = [
 
 [project.scripts]
 dnd-search = "dnd_search.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

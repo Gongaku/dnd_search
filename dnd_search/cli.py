@@ -3,6 +3,8 @@
 import concurrent.futures
 import logging
 import sys
+from collections.abc import Mapping
+from typing import Any
 
 import click
 from rich.console import Console
@@ -16,8 +18,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Shared options
 # ---------------------------------------------------------------------------
-
-
 def _common_options(f):
     """Decorator that attaches shared options to a command."""
     f = click.option(
@@ -44,10 +44,6 @@ def _common_options(f):
         help="Output format (table=rich, text=compact, markdown=PHB md, plain=PHB text).",
     )(f)
     return f
-
-
-def _apply_limit(items: list, limit: int) -> list:
-    return items[:limit] if limit > 0 else items
 
 
 def _validate_results(items: list, entity: str) -> bool:
@@ -232,13 +228,14 @@ def spells(
             logger.warning(f"Could not fetch class spell list: {e}")
             results = []
 
-    results = _apply_limit(results, limit)
+    results = results[:limit] if limit > 0 else results
     if not _validate_results(results, "spells"):
         return
 
     if fmt == "json":
         if detail:
-            for spell in results:
+
+            def _enrich_spell(spell):
                 d = (
                     scraper.fetch_spell_detail(spell.url, use_cache)
                     if spell.url
@@ -246,11 +243,16 @@ def spells(
                 )
                 spell.description = d.get("description", "")
                 spell.source = d.get("source", "")
+
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=scraper.MAX_WORKERS
+            ) as pool:
+                list(pool.map(_enrich_spell, results))
         formatters.output_json(results)
         return
 
     # Fetch detail for single-result detail view (all non-json formats)
-    detail_data = {}
+    detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
         detail_data = scraper.fetch_spell_detail(results[0].url, use_cache)
 
@@ -303,12 +305,13 @@ def classes(ctx: click.Context, name: str, fmt: str, detail: bool, limit: int) -
     if name:
         results = [c for c in results if name.lower() in c.name.lower()]
 
-    results = _apply_limit(results, limit)
+    results = results[:limit] if limit > 0 else results
     if not _validate_results(results, "classes"):
         return
 
     # Populate hit_die / primary_ability / saving_throws when --detail is set
     if detail:
+
         def _enrich(cls):
             d = scraper.fetch_class_detail(cls.url, use_cache) if cls.url else {}
             cls.hit_die = d.get("hit_die", "")
@@ -316,16 +319,19 @@ def classes(ctx: click.Context, name: str, fmt: str, detail: bool, limit: int) -
             cls.saving_throws = d.get("saving_throws", "")
             cls.description = d.get("description", "")
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=scraper.MAX_WORKERS
+        ) as pool:
             list(pool.map(_enrich, results))
 
     if fmt == "json":
         formatters.output_json(results)
         return
 
-    detail_data = {}
+    # When --detail and single result, re-fetch detail (hits parsed cache, negligible cost)
+    detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
-        detail_data = scraper.fetch_class_detail(results[0].url, use_cache)  # cached
+        detail_data = scraper.fetch_class_detail(results[0].url, use_cache)
 
     if fmt == "markdown":
         if detail and len(results) == 1:
@@ -414,7 +420,7 @@ def subclasses(
             results, key=lambda s: (s.parent_class.lower(), s.name.lower())
         )
 
-    results = _apply_limit(results, limit)
+    results = results[:limit] if limit > 0 else results
     if not _validate_results(results, "subclasses"):
         return
 
@@ -481,21 +487,27 @@ def feats(
     if source:
         results = [f for f in results if source.lower() in f.source.lower()]
 
-    results = _apply_limit(results, limit)
+    results = results[:limit] if limit > 0 else results
     if not _validate_results(results, "feats"):
         return
 
     if fmt == "json":
         if detail:
-            for feat in results:
+
+            def _enrich_feat(feat):
                 d = scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
                 feat.description = d.get("description", "")
                 if not feat.source:
                     feat.source = d.get("source", "")
+
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=scraper.MAX_WORKERS
+            ) as pool:
+                list(pool.map(_enrich_feat, results))
         formatters.output_json(results)
         return
 
-    detail_data = {}
+    detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
         detail_data = scraper.fetch_feat_detail(results[0].url, use_cache)
 
@@ -574,6 +586,7 @@ def races(
     if source:
         results = [r for r in results if source.lower() in r.source.lower()]
     if subrace:
+
         def _has_subrace(race):
             if not race.url:
                 return False
@@ -582,11 +595,13 @@ def races(
                 subrace.lower() in s["name"].lower() for s in d.get("subraces", [])
             )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=scraper.MAX_WORKERS
+        ) as pool:
             matches = list(pool.map(_has_subrace, results))
         results = [r for r, match in zip(results, matches) if match]
 
-    results = _apply_limit(results, limit)
+    results = results[:limit] if limit > 0 else results
     if not _validate_results(results, "races"):
         return
 
@@ -600,7 +615,7 @@ def races(
         formatters.output_json(results)
         return
 
-    detail_data = {}
+    detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
         detail_data = scraper.fetch_race_detail(results[0].url, use_cache)
 
@@ -695,21 +710,27 @@ def items(
     if source:
         results = [i for i in results if source.lower() in i.source.lower()]
 
-    results = _apply_limit(results, limit)
+    results = results[:limit] if limit > 0 else results
     if not _validate_results(results, "items"):
         return
 
     if fmt == "json":
         if detail:
-            for item in results:
+
+            def _enrich_item(item):
                 d = scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
                 item.description = d.get("description", "")
                 if not item.source:
                     item.source = d.get("source", "")
+
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=scraper.MAX_WORKERS
+            ) as pool:
+                list(pool.map(_enrich_item, results))
         formatters.output_json(results)
         return
 
-    detail_data = {}
+    detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
         detail_data = scraper.fetch_item_detail(results[0].url, use_cache)
 
@@ -959,7 +980,9 @@ def spell_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if spell is None:
         sys.exit(1)
 
-    detail = scraper.fetch_spell_detail(spell.url, use_cache) if spell.url else {}
+    detail: Mapping[str, Any] = (
+        scraper.fetch_spell_detail(spell.url, use_cache) if spell.url else {}
+    )
 
     if fmt == "json":
         spell.description = detail.get("description", "")
@@ -1010,7 +1033,9 @@ def feat_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if feat is None:
         sys.exit(1)
 
-    detail = scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
+    detail: Mapping[str, Any] = (
+        scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
+    )
 
     if fmt == "json":
         feat.description = detail.get("description", "")
@@ -1068,7 +1093,9 @@ def race_cmd(ctx: click.Context, name: str, subrace: str, fmt: str) -> None:
     if race is None:
         sys.exit(1)
 
-    detail = scraper.fetch_race_detail(race.url, use_cache) if race.url else {}
+    detail: Mapping[str, Any] = (
+        scraper.fetch_race_detail(race.url, use_cache) if race.url else {}
+    )
 
     if subrace:
         matched = [
@@ -1131,7 +1158,9 @@ def subclass_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if sub is None:
         sys.exit(1)
 
-    detail = scraper.fetch_subclass_detail(sub.url, use_cache) if sub.url else {}
+    detail: Mapping[str, Any] = (
+        scraper.fetch_subclass_detail(sub.url, use_cache) if sub.url else {}
+    )
 
     if fmt == "json":
         sub.description = detail.get("description", "")
@@ -1181,7 +1210,9 @@ def item_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if item is None:
         sys.exit(1)
 
-    detail = scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
+    detail: Mapping[str, Any] = (
+        scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
+    )
 
     if fmt == "json":
         item.description = detail.get("description", "")
@@ -1212,10 +1243,17 @@ def cache_clear() -> None:
     console.print(f"[green]Cleared {count} cached response(s).[/green]")
 
 
+@cache_group.command("prune")
+def cache_prune() -> None:
+    """Remove expired entries and trim cache to the size cap."""
+    removed = cache.prune()
+    console.print(f"[green]Pruned {removed} cache entry/entries.[/green]")
+
+
 @cache_group.command("info")
 def cache_info() -> None:
     """Show cache directory, entry count, disk usage, and age statistics."""
-    from dnd_search.cache import CACHE_DIR, DEFAULT_TTL
+    from dnd_search.cache import CACHE_DIR, HTML_TTL, DETAIL_TTL, MAX_ENTRIES
 
     if not CACHE_DIR.exists():
         console.print("[yellow]Cache directory does not exist.[/yellow]")
@@ -1237,11 +1275,20 @@ def cache_info() -> None:
             n //= 1024
         return f"{n:.0f} GB"
 
-    ttl_str = _fmt_age(DEFAULT_TTL)
     console.print(f"Cache directory: [cyan]{CACHE_DIR}[/cyan]")
-    console.print(f"TTL:             [dim]{ttl_str}[/dim]  [dim](override with DND_CACHE_TTL env var)[/dim]")
-    console.print(f"Entries:         [bright_green]{s['count']}[/bright_green]" +
-                  (f"  ([yellow]{s['expired']} expired[/yellow])" if s["expired"] else ""))
+    console.print(
+        f"HTML TTL:        [dim]{_fmt_age(HTML_TTL)}[/dim]  [dim](DND_CACHE_TTL)[/dim]"
+    )
+    console.print(
+        f"Detail TTL:      [dim]{_fmt_age(DETAIL_TTL)}[/dim]  [dim](DND_DETAIL_CACHE_TTL)[/dim]"
+    )
+    console.print(
+        f"Max entries:     [dim]{MAX_ENTRIES}[/dim]  [dim](DND_CACHE_MAX_ENTRIES)[/dim]"
+    )
+    console.print(
+        f"Entries:         [bright_green]{s['count']}[/bright_green]"
+        + (f"  ([yellow]{s['expired']} expired[/yellow])" if s["expired"] else "")
+    )
     console.print(f"Disk usage:      [dim]{_fmt_bytes(s['bytes'])}[/dim]")
     if s["count"]:
         console.print(f"Oldest entry:    [dim]{_fmt_age(s['oldest_age'])} ago[/dim]")
