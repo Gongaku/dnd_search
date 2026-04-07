@@ -1214,12 +1214,35 @@ def cache_clear() -> None:
 
 @cache_group.command("info")
 def cache_info() -> None:
-    """Show cache directory and entry count."""
-    from dnd_search.cache import CACHE_DIR
+    """Show cache directory, entry count, disk usage, and age statistics."""
+    from dnd_search.cache import CACHE_DIR, DEFAULT_TTL
 
     if not CACHE_DIR.exists():
         console.print("[yellow]Cache directory does not exist.[/yellow]")
         return
-    files = list(CACHE_DIR.glob("*.json"))
+
+    s = cache.stats()
+
+    def _fmt_age(seconds: float) -> str:
+        if seconds < 3600:
+            return f"{int(seconds // 60)}m"
+        if seconds < 86400:
+            return f"{seconds / 3600:.1f}h"
+        return f"{seconds / 86400:.1f}d"
+
+    def _fmt_bytes(n: int) -> str:
+        for unit in ("B", "KB", "MB"):
+            if n < 1024:
+                return f"{n:.0f} {unit}"
+            n //= 1024
+        return f"{n:.0f} GB"
+
+    ttl_str = _fmt_age(DEFAULT_TTL)
     console.print(f"Cache directory: [cyan]{CACHE_DIR}[/cyan]")
-    console.print(f"Cached entries:  [bright_green]{len(files)}[/bright_green]")
+    console.print(f"TTL:             [dim]{ttl_str}[/dim]  [dim](override with DND_CACHE_TTL env var)[/dim]")
+    console.print(f"Entries:         [bright_green]{s['count']}[/bright_green]" +
+                  (f"  ([yellow]{s['expired']} expired[/yellow])" if s["expired"] else ""))
+    console.print(f"Disk usage:      [dim]{_fmt_bytes(s['bytes'])}[/dim]")
+    if s["count"]:
+        console.print(f"Oldest entry:    [dim]{_fmt_age(s['oldest_age'])} ago[/dim]")
+        console.print(f"Newest entry:    [dim]{_fmt_age(s['newest_age'])} ago[/dim]")

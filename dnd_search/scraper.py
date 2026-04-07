@@ -1,7 +1,9 @@
 """Web scraper for dnd5e.wikidot.com."""
 
+import json
 import logging
 import re
+from functools import lru_cache, wraps
 from typing import Any
 
 import requests
@@ -30,23 +32,58 @@ _LEVEL_MAP = {
 }
 
 
-def _fetch(url: str, use_cache: bool = True) -> BeautifulSoup:
-    if use_cache:
-        cached = cache.get(url)
-        if cached:
-            return BeautifulSoup(cached, "lxml")
+@lru_cache(maxsize=256)
+def _fetch_soup(url: str) -> BeautifulSoup:
+    """Fetch and parse a URL, reading from file cache if available.
 
+    Results are memoised for the lifetime of the process — callers must not
+    mutate the returned BeautifulSoup object.
+    """
+    cached = cache.get(url)
+    if cached:
+        return BeautifulSoup(cached, "lxml")
     logger.info(f"Fetching {url}")
     try:
         resp = SESSION.get(url, timeout=15)
         resp.raise_for_status()
     except requests.RequestException as e:
         raise RuntimeError(f"Failed to fetch {url}: {e}") from e
-
     logger.debug(f"Response {resp.status_code} ({len(resp.text)} bytes)")
-    if use_cache:
-        cache.set(url, resp.text)
+    cache.set(url, resp.text)
     return BeautifulSoup(resp.text, "lxml")
+
+
+def _fetch(url: str, use_cache: bool = True) -> BeautifulSoup:
+    if use_cache:
+        return _fetch_soup(url)
+    logger.info(f"Fetching {url} (cache bypassed)")
+    try:
+        resp = SESSION.get(url, timeout=15)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to fetch {url}: {e}") from e
+    logger.debug(f"Response {resp.status_code} ({len(resp.text)} bytes)")
+    return BeautifulSoup(resp.text, "lxml")
+
+
+def _parse_cache(prefix: str):
+    """Decorator that caches a fetch_*_detail(url, use_cache) function's parsed result.
+
+    On a warm cache hit the function body is skipped entirely — only json.loads runs.
+    The cache key is "{prefix}:{url}" so it never collides with raw HTML entries.
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(url: str, use_cache: bool = True) -> dict[str, Any]:
+            key = f"{prefix}:{url}"
+            if use_cache and (hit := cache.get(key)):
+                return json.loads(hit)
+            result = fn(url, use_cache)
+            if use_cache:
+                cache.set(key, json.dumps(result))
+            return result
+        return wrapper
+    return decorator
 
 
 def _main_content(soup: BeautifulSoup) -> Tag | None:
@@ -279,6 +316,7 @@ def fetch_spells_for_class(class_name: str, use_cache: bool = True) -> list[str]
     return names
 
 
+@_parse_cache("spell")
 def fetch_spell_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
@@ -390,6 +428,7 @@ def fetch_classes(use_cache: bool = True) -> list[DnDClass]:
     return classes
 
 
+@_parse_cache("class")
 def fetch_class_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
@@ -484,6 +523,9 @@ def fetch_class_features(class_name: str, use_cache: bool = True) -> dict[str, A
     """Fetch the full level progression table and feature descriptions for a class."""
     slug = class_name.lower().strip()
     url = f"{BASE_URL}/{slug}"
+    key = f"class_features:{slug}"
+    if use_cache and (hit := cache.get(key)):
+        return json.loads(hit)
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
@@ -593,6 +635,8 @@ def fetch_class_features(class_name: str, use_cache: bool = True) -> dict[str, A
 
     result["features"] = features
     logger.info(f"Fetched {len(features)} features for {slug}")
+    if use_cache:
+        cache.set(key, json.dumps(result))
     return result
 
 
@@ -605,6 +649,10 @@ def fetch_subclasses(
     class_name: str | None = None, use_cache: bool = True
 ) -> list[Subclass]:
     """Fetch subclasses from the home page link list, enriched with source from class pages."""
+    _key = f"subclasses:{class_name or 'all'}"
+    if use_cache and (hit := cache.get(_key)):
+        return [Subclass(**d) for d in json.loads(hit)]
+
     links = _fetch_home_links(use_cache)
     subclasses: list[Subclass] = []
     seen = set()
@@ -657,9 +705,13 @@ def fetch_subclasses(
         )
 
     logger.info(f"Fetched {len(subclasses)} subclasses")
+    if use_cache:
+        from dataclasses import asdict
+        cache.set(_key, json.dumps([asdict(s) for s in subclasses]))
     return subclasses
 
 
+@_parse_cache("subclass")
 def fetch_subclass_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     """Fetch full detail for a single subclass page."""
     soup = _fetch(url, use_cache)
@@ -759,6 +811,7 @@ def fetch_feats(use_cache: bool = True) -> list[Feat]:
     return feats
 
 
+@_parse_cache("feat")
 def fetch_feat_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
@@ -921,6 +974,7 @@ def _parse_trait_li(li: Tag) -> dict[str, str]:
     return {"name": name, "text": text}
 
 
+@_parse_cache("race")
 def fetch_race_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
@@ -1119,6 +1173,7 @@ def fetch_items(use_cache: bool = True) -> list[Item]:
     return items
 
 
+@_parse_cache("item")
 def fetch_item_detail(url: str, use_cache: bool = True) -> dict[str, Any]:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
