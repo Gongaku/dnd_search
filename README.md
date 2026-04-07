@@ -6,11 +6,21 @@ A command-line tool for looking up D&D 5e (2014) content — spells, classes, su
 
 ## Installation
 
+**Linux / macOS**
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
+
+**Windows**
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e .
+```
+
+Requires Python 3.10 or later. On Windows, [Windows Terminal](https://aka.ms/terminal) or PowerShell 7+ is recommended for the best color output experience. The tool works in legacy `cmd.exe` but colors may be limited.
 
 ---
 

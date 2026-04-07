@@ -28,7 +28,7 @@ MAX_ENTRIES = int(os.getenv("DND_CACHE_MAX_ENTRIES", "500"))
 
 
 def _cache_path(key: str) -> Path:
-    return CACHE_DIR / f"{hashlib.md5(key.encode()).hexdigest()}.json"
+    return CACHE_DIR / f"{hashlib.md5(key.encode('utf-8')).hexdigest()}.json"
 
 
 def _ttl_for(key: str) -> int:
@@ -41,7 +41,7 @@ def get(key: str) -> str | None:
     if not path.exists():
         return None
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("v", 1) != CACHE_VERSION:
             logger.debug(f"Cache version mismatch for {key}, evicting")
             path.unlink(missing_ok=True)
@@ -53,7 +53,7 @@ def get(key: str) -> str | None:
         logger.debug(f"Cache hit for {key}")
         content = data["content"]
         if data.get("gz"):
-            content = gzip.decompress(bytes.fromhex(content)).decode()
+            content = gzip.decompress(bytes.fromhex(content)).decode("utf-8")
         return content
     except (json.JSONDecodeError, KeyError, OSError):
         return None
@@ -63,14 +63,15 @@ def set(key: str, content: str) -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = _cache_path(key)
     try:
-        compressed = gzip.compress(content.encode()).hex()
+        compressed = gzip.compress(content.encode("utf-8")).hex()
         path.write_text(
             json.dumps({
                 "v": CACHE_VERSION,
                 "timestamp": time.time(),
                 "content": compressed,
                 "gz": True,
-            })
+            }),
+            encoding="utf-8",
         )
         logger.debug(f"Cached response for {key}")
     except OSError as e:
@@ -90,7 +91,7 @@ def prune() -> int:
 
     for f in CACHE_DIR.glob("*.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
             if data.get("v", 1) != CACHE_VERSION:
                 f.unlink(missing_ok=True)
                 removed += 1
@@ -135,7 +136,7 @@ def stats() -> dict:
     ages: list[float] = []
     for f in CACHE_DIR.glob("*.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
             age = now - data["timestamp"]
             ages.append(age)
             total_bytes += f.stat().st_size
