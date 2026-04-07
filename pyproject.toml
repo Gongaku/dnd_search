@@ -1,16 +1,19 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name = "dnd_search"
-version = "0.0.2"
-description = "A simple package for querying DND 5e information"
-readme = "README.md"
-dependencies = ["beautifulsoup4", "requests", "tabulate"]
+name = "dnd-search"
+version = "0.1.0"
+description = "CLI tool for searching D&D 5e content from dnd5e.wikidot.com"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "requests>=2.28",
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "rich>=13.0",
+]
 
 [project.scripts]
-dnd_search = "dnd_search.cli:cli"
-
-# [tool.setuptools.packages.find]
-# where = ["src"]
+dnd-search = "dnd_search.cli:main"
