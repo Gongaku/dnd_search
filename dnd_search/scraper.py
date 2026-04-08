@@ -636,6 +636,13 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
         "saving_throws": "",
         "description": "",
         "subclasses": [],
+        "hp_first_level": "",
+        "hp_higher_levels": "",
+        "proficiency_armor": "",
+        "proficiency_weapons": "",
+        "proficiency_tools": "",
+        "proficiency_skills": "",
+        "equipment": "",
     }
     paragraphs: list[str] = []
 
@@ -647,6 +654,14 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
         t = el.get_text(strip=True)
         if t:
             paragraphs.append(t)
+        # Capture starting equipment paragraph + the list that follows it
+        if t.lower().startswith("you start with") and not detail.get("equipment"):
+            nxt = el.find_next_sibling(["ul", "ol"])
+            if nxt:
+                items = [_text(li) for li in nxt.find_all("li") if _text(li)]
+                detail["equipment"] = t + "\n" + "\n".join(f"• {item}" for item in items)
+            else:
+                detail["equipment"] = t
         children = list(el.children)
         i = 0
         while i < len(children):
@@ -667,7 +682,12 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
                 sib = children[j]
                 if getattr(sib, "name", None) in ("strong", "br"):
                     break
-                value_parts.append(str(sib))
+                # Use get_text() for Tag nodes so hyperlinked text (e.g. skill
+                # names wrapped in <a>) is extracted as plain text, not HTML.
+                if isinstance(sib, Tag):
+                    value_parts.append(sib.get_text(strip=True))
+                else:
+                    value_parts.append(str(sib))
                 j += 1
             value = " ".join("".join(value_parts).split()).strip(":")
             if label == "hit dice":
@@ -675,6 +695,18 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
                 detail["hit_die"] = m.group(1) if m else value
             elif label == "saving throws":
                 detail["saving_throws"] = value
+            elif label in ("hit points at 1st level", "hit points at first level"):
+                detail["hp_first_level"] = value
+            elif label == "hit points at higher levels":
+                detail["hp_higher_levels"] = value
+            elif label == "armor":
+                detail["proficiency_armor"] = value
+            elif label == "weapons":
+                detail["proficiency_weapons"] = value
+            elif label == "tools":
+                detail["proficiency_tools"] = value
+            elif label == "skills":
+                detail["proficiency_skills"] = value
             i = j
 
     detail["description"] = "\n\n".join(paragraphs[:3])

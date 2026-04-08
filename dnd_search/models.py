@@ -76,12 +76,22 @@ class SpellDetail(TypedDict):
     classes: list[str]
 
 
-class ClassDetail(TypedDict):
+class _ClassDetailRequired(TypedDict):
     hit_die: str
     primary_ability: str
     saving_throws: str
     description: str
     subclasses: list[SubclassEntry]
+
+
+class ClassDetail(_ClassDetailRequired, total=False):
+    hp_first_level: str
+    hp_higher_levels: str
+    proficiency_armor: str
+    proficiency_weapons: str
+    proficiency_tools: str
+    proficiency_skills: str
+    equipment: str
 
 
 class SubclassDetailDict(TypedDict):

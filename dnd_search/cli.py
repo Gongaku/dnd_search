@@ -127,7 +127,6 @@ def main(ctx: click.Context, debug: bool, verbose: int, no_cache: bool) -> None:
     \b
     Examples:
       dnd-search spells --level 3 --school evocation
-      dnd-search spells --name fireball --detail
       dnd-search classes --name fighter
       dnd-search subclasses --class rogue
       dnd-search feats --name "war caster"
@@ -293,7 +292,7 @@ def classes(ctx: click.Context, name: str, fmt: str, detail: bool, limit: int) -
       dnd-search classes
       dnd-search classes --name fighter
       dnd-search classes --detail
-      dnd-search classes --output markdown
+      dnd-search classes --output Markdown
     """
     use_cache = not ctx.obj["no_cache"]
     try:
@@ -807,6 +806,9 @@ def items(
     "--only-features", is_flag=True, default=False, help="Show only the class features."
 )
 @click.option(
+    "--only-header", is_flag=True, default=False, help="Show only the class overview panel."
+)
+@click.option(
     "--output",
     "-o",
     "fmt",
@@ -827,6 +829,7 @@ def class_info(
     only_table: bool,
     only_subclasses: bool,
     only_features: bool,
+    only_header: bool,
     fmt: str,
 ) -> None:
     """Show class features and subclasses for a single class.
@@ -840,6 +843,7 @@ def class_info(
       dnd-search class fighter --only-table
       dnd-search class paladin --only-subclasses
       dnd-search class druid --only-features
+      dnd-search class barbarian --only-header
       dnd-search class barbarian --output json
     """
     use_cache = not ctx.obj["no_cache"]
@@ -879,7 +883,7 @@ def class_info(
 
     # Resolve which sections to show. --only-* flags take priority over the
     # boolean --features/--no-features and --subclasses/--no-subclasses flags.
-    using_only = only_table or only_subclasses or only_features
+    using_only = only_table or only_subclasses or only_features or only_header
     show_table = only_table if using_only else True
     show_features_section = only_features if using_only else features
     show_subclasses_section = only_subclasses if using_only else show_subclasses
@@ -914,7 +918,17 @@ def class_info(
         )
         return
 
-    # Rich table output
+    # Rich table output — header panel shown unless a different --only-* flag is set
+    if not using_only or only_header:
+        class_detail = scraper.fetch_class_detail(
+            f"{scraper.BASE_URL}/{slug}", use_cache
+        )
+        formatters.format_class_header_panel(slug, class_detail)
+        console.print()
+
+    if only_header:
+        return
+
     if show_table:
         formatters.format_class_progression(
             data, min_level=min_level, max_level=max_level
@@ -1302,11 +1316,20 @@ def cache_info() -> None:
 
 @main.command("misc")
 @click.argument("name", default="")
-@click.option("--feature", "-f", default="", help="Filter features by name (partial match).")
-@click.option("--output", "-o", "fmt",
-    type=click.Choice(["table", "text", "json", "markdown", "plain"], case_sensitive=False),
-    default="table", show_default=True,
-    help="Output format.")
+@click.option(
+    "--feature", "-f", default="", help="Filter features by name (partial match)."
+)
+@click.option(
+    "--output",
+    "-o",
+    "fmt",
+    type=click.Choice(
+        ["table", "text", "json", "markdown", "plain"], case_sensitive=False
+    ),
+    default="table",
+    show_default=True,
+    help="Output format.",
+)
 @click.pass_context
 def misc(ctx: click.Context, name: str, feature: str, fmt: str) -> None:
     """List class quick links (invocations, infusions, maneuvers, etc.).
@@ -1326,7 +1349,9 @@ def misc(ctx: click.Context, name: str, feature: str, fmt: str) -> None:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
-    all_misc = [m for m in all_misc if m.url not in {scraper.BASE_URL + h for h in homebrew}]
+    all_misc = [
+        m for m in all_misc if m.url not in {scraper.BASE_URL + h for h in homebrew}
+    ]
 
     if not name:
         if not _validate_results(all_misc, "misc links"):
@@ -1362,7 +1387,9 @@ def misc(ctx: click.Context, name: str, feature: str, fmt: str) -> None:
     if feature:
         features = [f for f in features if feature.lower() in f.get("name", "").lower()]
         if not features:
-            console.print(f"[yellow]No feature matching '{feature}' in {link.name}.[/yellow]")
+            console.print(
+                f"[yellow]No feature matching '{feature}' in {link.name}.[/yellow]"
+            )
             sys.exit(1)
 
     if fmt == "json":

@@ -65,12 +65,14 @@ def set(key: str, content: str) -> None:
     try:
         compressed = gzip.compress(content.encode("utf-8")).hex()
         path.write_text(
-            json.dumps({
-                "v": CACHE_VERSION,
-                "timestamp": time.time(),
-                "content": compressed,
-                "gz": True,
-            }),
+            json.dumps(
+                {
+                    "v": CACHE_VERSION,
+                    "timestamp": time.time(),
+                    "content": compressed,
+                    "gz": True,
+                }
+            ),
             encoding="utf-8",
         )
         logger.debug(f"Cached response for {key}")

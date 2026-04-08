@@ -436,6 +436,92 @@ def format_class_detail(cls: DnDClass, detail: Mapping[str, Any]) -> None:
     )
 
 
+def format_class_header_panel(class_name: str, detail: Mapping[str, Any]) -> None:
+    """Render the overview panel shown at the top of the 'class' command."""
+    lines: list[str] = []
+
+    if detail.get("description"):
+        desc_lines = [
+            ln
+            for ln in detail["description"].splitlines()
+            if "you gain the following" not in ln.lower()
+        ]
+        desc = "\n".join(desc_lines).strip()
+        if desc:
+            lines.append(desc)
+
+    # Multiclass requirements
+    primary = detail.get("primary_ability", "")
+    if primary:
+        lines.append("")
+        lines.append("[bold magenta]Multiclass Requirements[/bold magenta]")
+        lines.append(
+            f"  You must have a {primary} to multiclass in and out of this class."
+        )
+
+    # Hit Points
+    hit_die = detail.get("hit_die", "")
+    hp1 = detail.get("hp_first_level", "")
+    hpN = detail.get("hp_higher_levels", "")
+    if hit_die or hp1 or hpN:
+        lines.append("")
+        lines.append("[bold magenta]Hit Points[/bold magenta]")
+        if hit_die:
+            lines.append(f"  [bold yellow]Hit Dice:[/bold yellow] {hit_die}")
+        if hp1:
+            lines.append(f"  [bold yellow]Hit Points at 1st Level:[/bold yellow] {hp1}")
+        if hpN:
+            lines.append(f"  [bold yellow]Hit Points at Higher Levels:[/bold yellow] {hpN}")
+
+    # Proficiencies
+    prof_fields = [
+        ("Armor", detail.get("proficiency_armor", "")),
+        ("Weapons", detail.get("proficiency_weapons", "")),
+        ("Tools", detail.get("proficiency_tools", "")),
+        ("Saving Throws", detail.get("saving_throws", "")),
+        ("Skills", detail.get("proficiency_skills", "")),
+    ]
+    prof_lines = [(label, val) for label, val in prof_fields if val]
+    if prof_lines:
+        lines.append("")
+        lines.append("[bold magenta]Proficiencies[/bold magenta]")
+        for label, val in prof_lines:
+            if label == "Skills":
+                # Parse "Choose two from X, Y, and Z" into intro line + bullet list
+                # Split on "from" to separate the preamble from the skill enumeration
+                if " from " in val.lower():
+                    idx = val.lower().index(" from ")
+                    preamble = val[:idx].strip()
+                    skill_str = val[idx + len(" from "):].strip().rstrip(".")
+                    # Split on commas, strip "and" from last item
+                    skills = [s.strip().lstrip("and ").strip() for s in skill_str.split(",")]
+                    lines.append(f"  [bold yellow]{label}:[/bold yellow] {preamble} from:")
+                    for skill in skills:
+                        if skill:
+                            lines.append(f"    • {skill}")
+                else:
+                    lines.append(f"  [bold yellow]{label}:[/bold yellow] {val}")
+            else:
+                lines.append(f"  [bold yellow]{label}:[/bold yellow] {val}")
+
+    # Equipment
+    equipment = detail.get("equipment", "")
+    if equipment:
+        lines.append("")
+        lines.append("[bold magenta magenta]Equipment[/bold magenta]")
+        for line in equipment.splitlines():
+            lines.append(f"  {line}")
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title=f"[bold cyan]{class_name.title()}[/bold cyan]",
+            border_style="cyan",
+            title_align="center",
+        )
+    )
+
+
 def format_classes_text(classes: list[DnDClass]) -> None:
     for cls in classes:
         hd = f" [bright_green]{cls.hit_die}[/bright_green]" if cls.hit_die else ""
