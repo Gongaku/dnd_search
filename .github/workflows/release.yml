@@ -49,10 +49,10 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: dnd-search-linux
-            binary: dnd-search
+            binary: dnd-search-linux
           - os: macos-latest
             artifact: dnd-search-macos
-            binary: dnd-search
+            binary: dnd-search-macos
           - os: windows-latest
             artifact: dnd-search-windows
             binary: dnd-search.exe
@@ -71,20 +71,13 @@ jobs:
           pip install -e .
 
       - name: Build binary
-        run: >
-          pyinstaller
-          --onefile
-          --name dnd-search
-          --hidden-import lxml.etree
-          --hidden-import lxml._elementpath
-          --hidden-import bs4
-          dnd_search/cli.py
+        run: pyinstaller --onefile --name ${{ matrix.artifact }} --hidden-import lxml.etree --hidden-import lxml._elementpath --hidden-import bs4 main.py --distpath .
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.binary }}
+          path: ${{ matrix.binary }}
 
   release:
     name: Create GitHub Release
@@ -96,12 +89,6 @@ jobs:
         with:
           path: dist/
 
-      - name: Rename binaries for release
-        run: |
-          mv dist/dnd-search-linux/dnd-search    dist/dnd-search-linux
-          mv dist/dnd-search-macos/dnd-search    dist/dnd-search-macos
-          mv dist/dnd-search-windows/dnd-search.exe dist/dnd-search-windows.exe
-
       - name: Create release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
@@ -109,6 +96,6 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            dist/dnd-search-linux
-            dist/dnd-search-macos
-            dist/dnd-search-windows.exe
+            dist/dnd-search-linux/dnd-search-linux
+            dist/dnd-search-macos/dnd-search-macos
+            dist/dnd-search-windows/dnd-search.exe
