@@ -27,14 +27,17 @@ class FeatureBlock(TypedDict, total=False):
       paragraph → text, text_md, text_rich
       list      → items
       heading   → text
+      table     → headers, rows
     """
 
-    type: str  # "paragraph" | "list" | "heading"
+    type: str  # "paragraph" | "list" | "heading" | "table"
     text: str
     text_md: str
     text_rich: str
     items: list[str]
     spell_table: list[SpellTableEntry]
+    headers: list[str]
+    rows: list[list[str]]
 
 
 class _FeatureRequired(TypedDict):
@@ -182,3 +185,10 @@ class Item:
     requires_attunement: bool = False
     source: str = ""
     description: str = ""
+
+
+@dataclass
+class MiscLink:
+    name: str
+    url: str
+    parent_class: str = ""

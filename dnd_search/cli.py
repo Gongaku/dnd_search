@@ -1293,3 +1293,83 @@ def cache_info() -> None:
     if s["count"]:
         console.print(f"Oldest entry:    [dim]{_fmt_age(s['oldest_age'])} ago[/dim]")
         console.print(f"Newest entry:    [dim]{_fmt_age(s['newest_age'])} ago[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# misc
+# ---------------------------------------------------------------------------
+
+
+@main.command("misc")
+@click.argument("name", default="")
+@click.option("--feature", "-f", default="", help="Filter features by name (partial match).")
+@click.option("--output", "-o", "fmt",
+    type=click.Choice(["table", "text", "json", "markdown", "plain"], case_sensitive=False),
+    default="table", show_default=True,
+    help="Output format.")
+@click.pass_context
+def misc(ctx: click.Context, name: str, feature: str, fmt: str) -> None:
+    """List class quick links (invocations, infusions, maneuvers, etc.).
+
+    \b
+    Examples:
+      dnd-search misc
+      dnd-search misc "eldritch invocations"
+      dnd-search misc "eldritch invocations" --feature "agonizing blast"
+      dnd-search misc infusions --output markdown
+    """
+    use_cache = not ctx.obj["no_cache"]
+    try:
+        all_misc = scraper.fetch_misc_links(use_cache)
+        homebrew = scraper.fetch_homebrew_hrefs(use_cache)
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    all_misc = [m for m in all_misc if m.url not in {scraper.BASE_URL + h for h in homebrew}]
+
+    if not name:
+        if not _validate_results(all_misc, "misc links"):
+            return
+        if fmt == "json":
+            formatters.output_json(all_misc)
+        elif fmt == "markdown":
+            formatters.format_misc_markdown(all_misc)
+        elif fmt == "plain":
+            formatters.format_misc_plain(all_misc)
+        elif fmt == "text":
+            formatters.format_misc_text(all_misc)
+        else:
+            formatters.format_misc_table(all_misc)
+        return
+
+    matches = [m for m in all_misc if name.lower() in m.name.lower()]
+    if not matches:
+        console.print(f"[yellow]No misc link matching '{name}'.[/yellow]")
+        sys.exit(1)
+    if len(matches) > 1:
+        names = ", ".join(m.name for m in matches)
+        console.print(f"[yellow]Multiple matches: {names}. Be more specific.[/yellow]")
+        sys.exit(1)
+
+    link = matches[0]
+    try:
+        features = scraper.fetch_misc_detail(link.url, use_cache)
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    if feature:
+        features = [f for f in features if feature.lower() in f.get("name", "").lower()]
+        if not features:
+            console.print(f"[yellow]No feature matching '{feature}' in {link.name}.[/yellow]")
+            sys.exit(1)
+
+    if fmt == "json":
+        formatters.output_json(features)
+    elif fmt == "markdown":
+        formatters.format_misc_detail_markdown(link, features)
+    elif fmt == "plain":
+        formatters.format_misc_detail_plain(link, features)
+    else:
+        formatters.format_misc_detail(link, features)

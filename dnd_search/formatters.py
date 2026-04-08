@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from dnd_search.models import DnDClass, Feat, Item, Race, Spell, Subclass
+from dnd_search.models import DnDClass, Feat, Item, MiscLink, Race, Spell, Subclass
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -183,6 +183,28 @@ def _render_blocks_rich(blocks: list, *, detect_dc: bool = False) -> list[str]:
         elif btype == "list":
             for item in block.get("items", []):
                 parts.append(f"  • {item}")
+        elif btype == "table":
+            headers = block.get("headers", [])
+            rows = block.get("rows", [])
+            if headers:
+                all_rows = [headers] + rows
+                widths = [
+                    max(len(r[c]) if c < len(r) else 0 for r in all_rows)
+                    for c in range(len(headers))
+                ]
+                # Pad plain text then wrap in markup so tag chars don't skew alignment
+                sep = "  ".join(
+                    f"\n[bold cyan]{h:<{widths[i]}}[/bold cyan]"
+                    for i, h in enumerate(headers)
+                )
+                parts.append(sep)
+                for row in rows:
+                    parts.append(
+                        "  ".join(
+                            f"{(row[i] if i < len(row) else ''):<{widths[i]}}"
+                            for i in range(len(headers))
+                        )
+                    )
     return parts
 
 
@@ -197,6 +219,21 @@ def _print_blocks_md(blocks: list) -> None:
             for item in block.get("items", []):
                 print(f"- {item}")
             print()
+        elif btype == "table":
+            headers = block.get("headers", [])
+            rows = block.get("rows", [])
+            if headers:
+                print("| " + " | ".join(headers) + " |")
+                print("| " + " | ".join("---" for _ in headers) + " |")
+                for row in rows:
+                    print(
+                        "| "
+                        + " | ".join(
+                            row[i] if i < len(row) else "" for i in range(len(headers))
+                        )
+                        + " |"
+                    )
+                print()
 
 
 def _print_blocks_plain(blocks: list) -> None:
@@ -210,6 +247,25 @@ def _print_blocks_plain(blocks: list) -> None:
             for item in block.get("items", []):
                 print(_wrap(item, indent="  * ", hang="    "))
             print()
+        elif btype == "table":
+            headers = block.get("headers", [])
+            rows = block.get("rows", [])
+            if headers:
+                all_rows = [headers] + rows
+                widths = [
+                    max(len(r[c]) if c < len(r) else 0 for r in all_rows)
+                    for c in range(len(headers))
+                ]
+                print("  ".join(f"{h:<{widths[i]}}" for i, h in enumerate(headers)))
+                print("  ".join("-" * widths[i] for i in range(len(headers))))
+                for row in rows:
+                    print(
+                        "  ".join(
+                            f"{(row[i] if i < len(row) else ''):<{widths[i]}}"
+                            for i in range(len(headers))
+                        )
+                    )
+                print()
 
 
 def _fmt_trait_md(trait: dict) -> str:
@@ -308,7 +364,7 @@ def format_spell_detail(spell: Spell, detail: Mapping[str, Any]) -> None:
         lines.append(f"[bold]Spell Lists:[/bold] {', '.join(detail['classes'])}")
 
     console.print(
-        Panel("\n".join(lines), title=title, border_style="cyan", title_align="left")
+        Panel("\n".join(lines), title=title, border_style="cyan", title_align="center")
     )
 
 
@@ -375,7 +431,7 @@ def format_class_detail(cls: DnDClass, detail: Mapping[str, Any]) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{cls.name}[/bold cyan]",
             border_style="cyan",
-            title_align="left",
+            title_align="center",
         )
     )
 
@@ -444,7 +500,7 @@ def format_subclass_detail(sub: Subclass, detail: Mapping[str, Any]) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{sub.name}[/bold cyan]",
             border_style="cyan",
-            title_align="left",
+            title_align="center",
         )
     )
 
@@ -520,7 +576,7 @@ def format_feat_detail(feat: Feat, detail: Mapping[str, Any]) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{feat.name}[/bold cyan]",
             border_style="cyan",
-            title_align="left",
+            title_align="center",
         )
     )
 
@@ -608,7 +664,7 @@ def format_race_detail(race: Race, detail: Mapping[str, Any]) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{race.name}[/bold cyan]",
             border_style="cyan",
-            title_align="left",
+            title_align="center",
         )
     )
 
@@ -683,7 +739,7 @@ def format_item_detail(item: Item, detail: Mapping[str, Any]) -> None:
             "\n".join(lines),
             title=f"[bold cyan]{item.name}[/bold cyan]",
             border_style="cyan",
-            title_align="left",
+            title_align="center",
         )
     )
 
@@ -1481,4 +1537,96 @@ def format_class_plain(
                 [[s["name"], s.get("source", "")] for s in subclasses],
             )
         )
+        print()
+
+
+# ---------------------------------------------------------------------------
+# Misc formatters
+# ---------------------------------------------------------------------------
+def format_misc_table(items: list[MiscLink]) -> None:
+    if not items:
+        console.print("[yellow]No misc links found.[/yellow]")
+        return
+    table = Table(
+        title=f"Misc Links ({len(items)} results)",
+        show_lines=False,
+        highlight=True,
+    )
+    table.add_column("Name", style="bold cyan", no_wrap=True)
+    table.add_column("Class", style="bright_green")
+    for item in items:
+        table.add_row(item.name, item.parent_class)
+    console.print(table)
+
+
+def format_misc_text(items: list[MiscLink]) -> None:
+    for item in items:
+        cls_str = (
+            f" [bright_green]({item.parent_class})[/bright_green]"
+            if item.parent_class
+            else ""
+        )
+        console.print(f"[bold cyan]{item.name}[/bold cyan]{cls_str}")
+
+
+def format_misc_detail(link: MiscLink, features: list) -> None:
+    console.print(
+        Panel(
+            "\n".join(
+                filter(
+                    None,
+                    [
+                        f"[bold]URL:[/bold]    [link={link.url}]{link.url}[/link]",
+                        _rich_field("Class", link.parent_class),
+                    ],
+                )
+            ),
+            title=f"[bold cyan]{link.name}[/bold cyan]",
+            border_style="cyan",
+            title_align="center",
+        )
+    )
+    for feat in features:
+        body_parts = _render_blocks_rich(feat.get("body", []))
+        console.print(
+            Panel(
+                "\n".join(body_parts) if body_parts else "",
+                title=f"[bold cyan]{feat['name']}[/bold cyan]",
+                border_style="bright_black",
+                padding=(0, 1),
+                title_align="left",
+            )
+        )
+
+
+def format_misc_markdown(items: list[MiscLink]) -> None:
+    headers = ["Name", "Class"]
+    rows = [[i.name, i.parent_class] for i in items]
+    print(_md_table(headers, rows))
+
+
+def format_misc_detail_markdown(link: MiscLink, features: list) -> None:
+    print(f"# {link.name}\n")
+    if link.parent_class:
+        print(f"*Class: {link.parent_class}*\n")
+    for feat in features:
+        print(f"## {feat['name']}\n")
+        _print_blocks_md(feat.get("body", []))
+        print()
+
+
+def format_misc_plain(items: list[MiscLink]) -> None:
+    headers = ["Name", "Class"]
+    rows = [[i.name, i.parent_class] for i in items]
+    print(_plain_table(headers, rows))
+
+
+def format_misc_detail_plain(link: MiscLink, features: list) -> None:
+    print(f"{link.name.upper()}")
+    if link.parent_class:
+        print(f"Class: {link.parent_class}")
+    print()
+    for feat in features:
+        print(feat["name"].upper())
+        _print_blocks_plain(feat.get("body", []))
         print()

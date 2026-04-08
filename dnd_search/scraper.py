@@ -6,9 +6,7 @@ import logging
 import re
 from dataclasses import asdict
 from functools import lru_cache, wraps
-from typing import Any, Callable, TypeVar, cast
-
-_DetailT = TypeVar("_DetailT")
+from typing import Callable, TypeVar, cast
 
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
@@ -23,6 +21,7 @@ from dnd_search.models import (
     Feature,
     Item,
     ItemDetail,
+    MiscLink,
     Race,
     RaceDetail,
     Spell,
@@ -34,6 +33,8 @@ from dnd_search.models import (
     SubraceDetail,
     Trait,
 )
+
+_DetailT = TypeVar("_DetailT")
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ _RE_DC_SCHOOL = re.compile(r"\s*DC\b.*$", re.I)
 def _fetch_soup(url: str) -> BeautifulSoup:
     """Fetch and parse a URL, reading from file cache if available.
 
-    Results are memoised for the lifetime of the process — callers must not
+    Results are memoized for the lifetime of the process — callers must not
     mutate the returned BeautifulSoup object.
     """
     cached = cache.get(url)
@@ -116,6 +117,7 @@ def _parse_cache(prefix: str):
     On a warm cache hit the function body is skipped entirely — only json.loads runs.
     The cache key is "{prefix}:{url}" so it never collides with raw HTML entries.
     """
+
     def decorator(fn: Callable[..., _DetailT]) -> Callable[..., _DetailT]:
         @wraps(fn)
         def wrapper(url: str, use_cache: bool = True) -> _DetailT:
@@ -126,7 +128,9 @@ def _parse_cache(prefix: str):
             if use_cache:
                 cache.set(key, json.dumps(result))
             return result
+
         return wrapper
+
     return decorator
 
 
@@ -207,7 +211,9 @@ def _parse_granted_spells(table: Tag) -> list[SpellTableEntry] | None:
     return entries or None
 
 
-def _para_inline(el, bold: tuple[str, str], italic: tuple[str, str], links: bool = False) -> str:
+def _para_inline(
+    el, bold: tuple[str, str], italic: tuple[str, str], links: bool = False
+) -> str:
     """Render element children with inline formatting.
 
     bold/italic are (open, close) tag pairs, e.g. ("**", "**") for markdown
@@ -218,7 +224,9 @@ def _para_inline(el, bold: tuple[str, str], italic: tuple[str, str], links: bool
         name = getattr(child, "name", None)
         if links and name == "a":
             href = str(child.get("href", ""))
-            link_text = _RE_MULTI_SPACE.sub(" ", child.get_text(separator=" ", strip=True))
+            link_text = _RE_MULTI_SPACE.sub(
+                " ", child.get_text(separator=" ", strip=True)
+            )
             if href.startswith("/"):
                 href = BASE_URL + href
             parts.append(f"[{link_text}]({href})" if link_text else "")
@@ -242,7 +250,9 @@ def _para_md(el) -> str:
 
 def _para_rich(el) -> str:
     """Render element content as Rich markup, preserving bold/italic."""
-    return _para_inline(el, bold=("[bold]", "[/bold]"), italic=("[italic]", "[/italic]"))
+    return _para_inline(
+        el, bold=("[bold]", "[/bold]"), italic=("[italic]", "[/italic]")
+    )
 
 
 def _norm_url(url: str) -> str:
@@ -256,7 +266,7 @@ def _href(tag: Tag | None) -> str:
     raw = str(tag.get("href", ""))
     # Wiki table links sometimes use http:// — normalise to https://.
     if raw.startswith("http://"):
-        raw = "https://" + raw[len("http://"):]
+        raw = "https://" + raw[len("http://") :]
     if raw.startswith("/"):
         return BASE_URL + raw
     return raw
@@ -437,10 +447,7 @@ def fetch_spell_detail(url: str, use_cache: bool = True) -> SpellDetail:
             continue
 
         # "3rd-level evocation" / "Evocation cantrip" — level+school line, skip
-        if (
-            _RE_LEVEL_SCHOOL.match(text)
-            or _RE_CANTRIP.match(text)
-        ):
+        if _RE_LEVEL_SCHOOL.match(text) or _RE_CANTRIP.match(text):
             continue
 
         # Concatenated properties block — "Casting Time:...Range:..." with no spaces between keys
@@ -492,19 +499,19 @@ _BASE_CLASSES = [
 # First-column header names used by each class's subclass table on the wiki.
 # Each class calls its subclass concept something different (Path, Circle, etc.).
 _SUBCLASS_COL_NAMES = {
-    "archetype",   # Fighter, Rogue
-    "circle",      # Druid
-    "college",     # Bard
-    "conclave",    # Ranger
-    "domain",      # Cleric
-    "oath",        # Paladin
-    "origin",      # Sorcerer
-    "path",        # Barbarian
-    "patron",      # Warlock
-    "school",      # Wizard
-    "specialty",   # Artificer
-    "subclass",    # generic fallback
-    "tradition",   # Monk
+    "archetype",  # Fighter, Rogue
+    "circle",  # Druid
+    "college",  # Bard
+    "conclave",  # Ranger
+    "domain",  # Cleric
+    "oath",  # Paladin
+    "origin",  # Sorcerer
+    "path",  # Barbarian
+    "patron",  # Warlock
+    "school",  # Wizard
+    "specialty",  # Artificer
+    "subclass",  # generic fallback
+    "tradition",  # Monk
 }
 
 
@@ -519,6 +526,83 @@ def _fetch_home_links(use_cache: bool = True) -> list[tuple[str, str]]:
         for a in content.find_all("a")
         if str(a.get("href", "")).startswith("/") and _text(a)
     ]
+
+
+def _fetch_section_links(
+    section_keyword: str,
+    use_cache: bool = True,
+    *,
+    anchor_id: str | None = None,
+) -> list[tuple[str, str]]:
+    """Return (name, href) pairs for all links under a named homepage section.
+
+    If `anchor_id` is given, the section heading is located by that element id
+    (e.g. "toc85") instead of by keyword text — more reliable when the page
+    assigns stable TOC anchors.  Otherwise the first heading whose text contains
+    `section_keyword` (case-insensitive) is used.
+
+    Walks the heading's next siblings collecting <a> links until a heading of
+    the same or higher level signals the start of the next section.
+    """
+    soup = _fetch(BASE_URL + "/", use_cache)
+    content = _main_content(soup)
+    if content is None:
+        return []
+
+    HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5"}
+
+    # Locate the section heading.
+    target: Tag | None = None
+    if anchor_id:
+        el = soup.find(id=anchor_id)
+        if el:
+            # The anchor may be a <span>/<a> inside a heading — walk up to the heading.
+            candidate = el if el.name in HEADING_TAGS else el.find_parent(HEADING_TAGS)
+            if candidate:
+                target = candidate
+    if target is None:
+        for tag in content.find_all(HEADING_TAGS):
+            if section_keyword.lower() in tag.get_text(strip=True).lower():
+                target = tag
+                break
+
+    if target is None:
+        logger.debug(f"_fetch_section_links: no heading found for '{section_keyword}'")
+        return []
+
+    section_level = int(target.name[1])
+    results: list[tuple[str, str]] = []
+
+    # Collect all headings and links in document order, then slice from the
+    # target heading to the next same-or-higher heading.  This is robust to
+    # any nesting depth — find_next_siblings() only sees direct siblings and
+    # would miss links wrapped in layout divs.
+    all_elements = content.find_all(["h1", "h2", "h3", "h4", "h5", "a"])
+    try:
+        start = all_elements.index(target)
+    except ValueError:
+        return []
+
+    for el in all_elements[start + 1:]:
+        if el.name in HEADING_TAGS and int(el.name[1]) <= section_level:
+            break
+        if el.name == "a":
+            href = str(el.get("href", ""))
+            name = _text(el)
+            if href.startswith("/") and name:
+                results.append((name, href))
+
+    return results
+
+
+def fetch_homebrew_hrefs(use_cache: bool = True) -> set[str]:
+    """Return href values for all links under the 'Homebrew Subclasses' section."""
+    return {
+        href
+        for _, href in _fetch_section_links(
+            "homebrew subclass", use_cache, anchor_id="toc98"
+        )
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -546,7 +630,13 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
     if content is None:
         return cast(ClassDetail, {})
 
-    detail: ClassDetail = {"hit_die": "", "primary_ability": "", "saving_throws": "", "description": "", "subclasses": []}
+    detail: ClassDetail = {
+        "hit_die": "",
+        "primary_ability": "",
+        "saving_throws": "",
+        "description": "",
+        "subclasses": [],
+    }
     paragraphs: list[str] = []
 
     # Single pass: collect description paragraphs and parse <strong>Key:</strong> value pairs.
@@ -633,7 +723,7 @@ def _parse_progression_table(table: Tag) -> tuple[list[str], list[list[str]]]:
     headers = [c.get_text(strip=True) for c in rows[header_idx].find_all(["th", "td"])]
     level_rows = [
         [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
-        for row in rows[header_idx + 1:]
+        for row in rows[header_idx + 1 :]
         if (cells := row.find_all(["td", "th"])) and cells[0].get_text(strip=True)
     ]
     return headers, level_rows
@@ -648,11 +738,13 @@ def _parse_subclass_table(table: Tag) -> list[SubclassEntry]:
             link = cells[0].find("a")
             sub_name = _text(cells[0])
             if sub_name:
-                subclasses.append({
-                    "name": sub_name,
-                    "url": _href(link) if link else "",
-                    "source": _text(cells[1]) if len(cells) > 1 else "",
-                })
+                subclasses.append(
+                    {
+                        "name": sub_name,
+                        "url": _href(link) if link else "",
+                        "source": _text(cells[1]) if len(cells) > 1 else "",
+                    }
+                )
     return subclasses
 
 
@@ -662,7 +754,9 @@ def _parse_feature_descriptions(content: Tag) -> list[Feature]:
     current: Feature | None = None
     past_table = False
 
-    for el in content.find_all(["table", "h1", "h2", "h3", "h4", "h5", "p", "ul", "ol"]):
+    for el in content.find_all(
+        ["table", "h1", "h2", "h3", "h4", "h5", "p", "ul", "ol"]
+    ):
         if el.name == "table":
             past_table = True
             continue
@@ -698,12 +792,72 @@ def _parse_feature_descriptions(content: Tag) -> list[Feature]:
                     current["body"].append({"type": "list", "items": items})
             else:
                 current["body"].append(
-                    {"type": "paragraph", "text": text, "text_md": _para_md(el), "text_rich": _para_rich(el)}
+                    {
+                        "type": "paragraph",
+                        "text": text,
+                        "text_md": _para_md(el),
+                        "text_rich": _para_rich(el),
+                    }
                 )
                 if current["level"] is None:
                     m = _RE_LEVEL_IN_TEXT.search(text)
                     if m:
                         current["level"] = int(m.group(1))
+
+    if current:
+        features.append(current)
+    return features
+
+
+def _parse_misc_features(content: Tag) -> list[Feature]:
+    """Parse h2/h3/h4 headings as feature entries from misc pages.
+
+    Unlike _parse_feature_descriptions, there is no progression table gate —
+    misc pages (invocations, infusions, maneuvers, disciplines) list entries
+    as headings from the start of the content.
+    """
+    features: list[Feature] = []
+    current: Feature | None = None
+
+    for el in content.find_all(["h1", "h2", "h3", "h4", "h5", "p", "ul", "ol", "table"]):
+        text = el.get_text(strip=True)
+        if not text:
+            continue
+
+        if el.name == "h1":
+            # Page title — flush and skip
+            if current:
+                features.append(current)
+            current = None
+            continue
+
+        if el.name in ("h2", "h3", "h4"):
+            if current:
+                features.append(current)
+            current = {"name": text, "level": None, "body": []}
+
+        elif el.name == "h5" and current is not None:
+            current["body"].append({"type": "heading", "text": text})
+
+        elif el.name == "table" and current is not None:
+            headers, rows = _parse_progression_table(el)
+            if headers:
+                current["body"].append({"type": "table", "headers": headers, "rows": rows})
+
+        elif el.name in ("p", "ul", "ol") and current is not None:
+            if el.name in ("ul", "ol"):
+                items = [_text(li) for li in el.find_all("li") if _text(li)]
+                if items:
+                    current["body"].append({"type": "list", "items": items})
+            else:
+                current["body"].append(
+                    {
+                        "type": "paragraph",
+                        "text": text,
+                        "text_md": _para_md(el),
+                        "text_rich": _para_rich(el),
+                    }
+                )
 
     if current:
         features.append(current)
@@ -765,13 +919,17 @@ def fetch_subclasses(
     # fetch_class_detail is used here (not fetch_class_features) to avoid
     # parsing full progression tables and feature descriptions just for source data.
     source_map: dict[str, str] = {}
+    valid_urls: set[str] = set()
     for cls in target_classes:
         try:
             cls_url = f"{BASE_URL}/{cls}"
             data = fetch_class_detail(cls_url, use_cache)
             for entry in data.get("subclasses", []):
-                if entry.get("url") and entry.get("source"):
-                    source_map[_norm_url(entry["url"])] = entry["source"]
+                if entry.get("url"):
+                    norm = _norm_url(entry["url"])
+                    valid_urls.add(norm)
+                    if entry.get("source"):
+                        source_map[norm] = entry["source"]
         except Exception as e:
             logger.debug(f"Could not fetch subclass sources for {cls}: {e}")
 
@@ -799,6 +957,8 @@ def fetch_subclasses(
 
         display_name = f"{name} (UA)" if sub_slug.endswith("-ua") else name
         full_url = BASE_URL + href
+        if valid_urls and _norm_url(full_url) not in valid_urls:
+            continue
         subclasses.append(
             Subclass(
                 name=display_name,
@@ -812,6 +972,69 @@ def fetch_subclasses(
     if use_cache:
         cache.set(_key, json.dumps([asdict(s) for s in subclasses]))
     return subclasses
+
+
+def fetch_misc_links(use_cache: bool = True) -> list[MiscLink]:
+    """Collect class quick links (invocations, infusions, maneuvers, etc.)
+
+    These are class-namespaced home page links that are NOT listed in any
+    class page's official subclass table.
+    """
+    links = _fetch_home_links(use_cache)
+
+    # Build set of valid subclass URLs from all class pages.
+    valid_urls: set[str] = set()
+    for cls in _BASE_CLASSES:
+        try:
+            data = fetch_class_detail(f"{BASE_URL}/{cls}", use_cache)
+            for entry in data.get("subclasses", []):
+                if entry.get("url"):
+                    valid_urls.add(_norm_url(entry["url"]))
+        except Exception as e:
+            logger.debug(f"fetch_misc_links: could not load {cls}: {e}")
+
+    misc: list[MiscLink] = []
+    seen: set[str] = set()
+
+    for name, href in links:
+        slug = href.lstrip("/")
+        if ":" not in slug:
+            continue
+        parent_slug = slug.split(":")[0]
+        if parent_slug not in _BASE_CLASSES:
+            continue
+        full_url = BASE_URL + href
+        norm = _norm_url(full_url)
+        if norm in valid_urls:
+            continue
+        if norm in seen:
+            continue
+        seen.add(norm)
+        misc.append(MiscLink(name=name, url=full_url, parent_class=parent_slug.title()))
+
+    # Append links from the homepage "Miscellaneous" section.
+    for name, href in _fetch_section_links(
+        "miscellaneous", use_cache, anchor_id="toc85"
+    ):
+        full_url = BASE_URL + href
+        norm = _norm_url(full_url)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        misc.append(MiscLink(name=name, url=full_url, parent_class="Miscellaneous"))
+
+    logger.info(f"Fetched {len(misc)} misc links")
+    return misc
+
+
+@_parse_cache("misc")
+def fetch_misc_detail(url: str, use_cache: bool = True) -> list[Feature]:
+    """Fetch and parse features from a misc page (invocations, infusions, etc.)."""
+    soup = _fetch(url, use_cache)
+    content = _main_content(soup)
+    if content is None:
+        return []
+    return _parse_misc_features(content)
 
 
 @_parse_cache("subclass")
@@ -878,7 +1101,12 @@ def fetch_subclass_detail(url: str, use_cache: bool = True) -> SubclassDetailDic
                 ).lstrip("\n")
             else:
                 current["body"].append(
-                    {"type": "paragraph", "text": text, "text_md": md_text, "text_rich": rich_text}
+                    {
+                        "type": "paragraph",
+                        "text": text,
+                        "text_md": md_text,
+                        "text_rich": rich_text,
+                    }
                 )
 
         elif tag in ("ul", "ol") and current is not None:
@@ -909,7 +1137,7 @@ def fetch_feats(use_cache: bool = True) -> list[Feat]:
         if href in seen:
             continue
         seen.add(href)
-        slug = href[len("/feat:"):]
+        slug = href[len("/feat:") :]
         display_name = f"{name} (UA)" if slug.endswith("-ua") else name
         stubs.append(Feat(name=display_name, url=BASE_URL + href))
 
@@ -949,10 +1177,12 @@ def _fetch_feat_basic(url: str, use_cache: bool = True) -> dict[str, str]:
             continue
         low = text.lower()
         if low.startswith("source:") and "source" not in result:
-            result["source"] = text[len("source:"):].strip()
+            result["source"] = text[len("source:") :].strip()
         elif low.startswith("prerequisite") and "prerequisites" not in result:
             first = _first_line(p)
-            result["prerequisites"] = re.sub(r"^prerequisites?:\s*", "", first, flags=re.I)
+            result["prerequisites"] = re.sub(
+                r"^prerequisites?:\s*", "", first, flags=re.I
+            )
         if "source" in result and "prerequisites" in result:
             break
     return result
@@ -985,7 +1215,9 @@ def fetch_feat_detail(url: str, use_cache: bool = True) -> FeatDetail:
 
         if low.startswith("prerequisite"):
             first = _first_line(p)
-            detail["prerequisites"] = re.sub(r"^prerequisites?:\s*", "", first, flags=re.I)
+            detail["prerequisites"] = re.sub(
+                r"^prerequisites?:\s*", "", first, flags=re.I
+            )
             continue
 
         md_text = _para_md(p)
@@ -1044,7 +1276,9 @@ def _fetch_race_basic(url: str, use_cache: bool = True) -> dict[str, str]:
             if m:
                 result["size"] = m.group(1).capitalize()
             else:
-                m2 = re.search(r"\b(Tiny|Small|Medium|Large|Huge|Gargantuan)\b", text, re.I)
+                m2 = re.search(
+                    r"\b(Tiny|Small|Medium|Large|Huge|Gargantuan)\b", text, re.I
+                )
                 if m2:
                     result["size"] = m2.group(1).capitalize()
 
@@ -1198,7 +1432,9 @@ def fetch_race_detail(url: str, use_cache: bool = True) -> RaceDetail:
             spell_entries = _parse_granted_spells(el)
             if spell_entries:
                 # spell_table only appears on subrace sections, not the base result
-                cast(SubraceDetail, current_target).setdefault("spell_table", []).extend(spell_entries)
+                cast(SubraceDetail, current_target).setdefault(
+                    "spell_table", []
+                ).extend(spell_entries)
             continue
 
         if tag in ("ul", "ol"):
