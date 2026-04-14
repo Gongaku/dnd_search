@@ -235,11 +235,15 @@ def spells(
         if detail:
 
             def _enrich_spell(spell):
-                d = (
-                    scraper.fetch_spell_detail(spell.url, use_cache)
-                    if spell.url
-                    else {}
-                )
+                try:
+                    d = (
+                        scraper.fetch_spell_detail(spell.url, use_cache)
+                        if spell.url
+                        else {}
+                    )
+                except RuntimeError as e:
+                    logger.warning(f"Could not fetch detail for {spell.name}: {e}")
+                    d = {}
                 spell.description = d.get("description", "")
                 spell.source = d.get("source", "")
 
@@ -253,7 +257,11 @@ def spells(
     # Fetch detail for single-result detail view (all non-json formats)
     detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
-        detail_data = scraper.fetch_spell_detail(results[0].url, use_cache)
+        try:
+            detail_data = scraper.fetch_spell_detail(results[0].url, use_cache)
+        except RuntimeError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
 
     if fmt == "markdown":
         if detail and len(results) == 1:
@@ -312,7 +320,11 @@ def classes(ctx: click.Context, name: str, fmt: str, detail: bool, limit: int) -
     if detail:
 
         def _enrich(cls):
-            d = scraper.fetch_class_detail(cls.url, use_cache) if cls.url else {}
+            try:
+                d = scraper.fetch_class_detail(cls.url, use_cache) if cls.url else {}
+            except RuntimeError as e:
+                logger.warning(f"Could not fetch detail for {cls.name}: {e}")
+                d = {}
             cls.hit_die = d.get("hit_die", "")
             cls.primary_ability = d.get("primary_ability", "")
             cls.saving_throws = d.get("saving_throws", "")
@@ -330,7 +342,11 @@ def classes(ctx: click.Context, name: str, fmt: str, detail: bool, limit: int) -
     # When --detail and single result, re-fetch detail (hits parsed cache, negligible cost)
     detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
-        detail_data = scraper.fetch_class_detail(results[0].url, use_cache)
+        try:
+            detail_data = scraper.fetch_class_detail(results[0].url, use_cache)
+        except RuntimeError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
 
     if fmt == "markdown":
         if detail and len(results) == 1:
@@ -494,7 +510,11 @@ def feats(
         if detail:
 
             def _enrich_feat(feat):
-                d = scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
+                try:
+                    d = scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
+                except RuntimeError as e:
+                    logger.warning(f"Could not fetch detail for {feat.name}: {e}")
+                    d = {}
                 feat.description = d.get("description", "")
                 if not feat.source:
                     feat.source = d.get("source", "")
@@ -508,7 +528,11 @@ def feats(
 
     detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
-        detail_data = scraper.fetch_feat_detail(results[0].url, use_cache)
+        try:
+            detail_data = scraper.fetch_feat_detail(results[0].url, use_cache)
+        except RuntimeError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
 
     if fmt == "markdown":
         if detail and len(results) == 1:
@@ -589,7 +613,11 @@ def races(
         def _has_subrace(race):
             if not race.url:
                 return False
-            d = scraper.fetch_race_detail(race.url, use_cache)
+            try:
+                d = scraper.fetch_race_detail(race.url, use_cache)
+            except RuntimeError as e:
+                logger.warning(f"Could not fetch detail for {race.name}: {e}")
+                return False
             return any(
                 subrace.lower() in s["name"].lower() for s in d.get("subraces", [])
             )
@@ -607,7 +635,11 @@ def races(
     if fmt == "json":
         if detail:
             for race in results:
-                d = scraper.fetch_race_detail(race.url, use_cache) if race.url else {}
+                try:
+                    d = scraper.fetch_race_detail(race.url, use_cache) if race.url else {}
+                except RuntimeError as e:
+                    logger.warning(f"Could not fetch detail for {race.name}: {e}")
+                    d = {}
                 race.description = d.get("description", "")
                 if not race.source:
                     race.source = d.get("source", "")
@@ -616,7 +648,11 @@ def races(
 
     detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
-        detail_data = scraper.fetch_race_detail(results[0].url, use_cache)
+        try:
+            detail_data = scraper.fetch_race_detail(results[0].url, use_cache)
+        except RuntimeError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
 
     if fmt == "markdown":
         if detail and len(results) == 1:
@@ -717,7 +753,11 @@ def items(
         if detail:
 
             def _enrich_item(item):
-                d = scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
+                try:
+                    d = scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
+                except RuntimeError as e:
+                    logger.warning(f"Could not fetch detail for {item.name}: {e}")
+                    d = {}
                 item.description = d.get("description", "")
                 if not item.source:
                     item.source = d.get("source", "")
@@ -731,7 +771,11 @@ def items(
 
     detail_data: Mapping[str, Any] = {}
     if detail and len(results) == 1 and results[0].url:
-        detail_data = scraper.fetch_item_detail(results[0].url, use_cache)
+        try:
+            detail_data = scraper.fetch_item_detail(results[0].url, use_cache)
+        except RuntimeError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
 
     if fmt == "markdown":
         if detail and len(results) == 1:
@@ -872,7 +916,7 @@ def class_info(
         sys.exit(1)
 
     try:
-        data = scraper.fetch_class_features(slug, use_cache)
+        data = scraper.fetch_class_features(f"{scraper.BASE_URL}/{slug}", use_cache)
     except RuntimeError as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
@@ -920,10 +964,13 @@ def class_info(
 
     # Rich table output — header panel shown unless a different --only-* flag is set
     if not using_only or only_header:
-        class_detail = scraper.fetch_class_detail(
-            f"{scraper.BASE_URL}/{slug}", use_cache
-        )
-        formatters.format_class_header_panel(slug, class_detail)
+        try:
+            class_detail = scraper.fetch_class_detail(
+                f"{scraper.BASE_URL}/{slug}", use_cache
+            )
+            formatters.format_class_header_panel(slug, class_detail)
+        except RuntimeError as e:
+            logger.warning(f"Could not fetch class detail for {slug}: {e}")
         console.print()
 
     if only_header:
@@ -994,9 +1041,13 @@ def spell_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if spell is None:
         sys.exit(1)
 
-    detail: Mapping[str, Any] = (
-        scraper.fetch_spell_detail(spell.url, use_cache) if spell.url else {}
-    )
+    try:
+        detail: Mapping[str, Any] = (
+            scraper.fetch_spell_detail(spell.url, use_cache) if spell.url else {}
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
 
     if fmt == "json":
         spell.description = detail.get("description", "")
@@ -1047,9 +1098,13 @@ def feat_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if feat is None:
         sys.exit(1)
 
-    detail: Mapping[str, Any] = (
-        scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
-    )
+    try:
+        detail: Mapping[str, Any] = (
+            scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
 
     if fmt == "json":
         feat.description = detail.get("description", "")
@@ -1107,9 +1162,13 @@ def race_cmd(ctx: click.Context, name: str, subrace: str, fmt: str) -> None:
     if race is None:
         sys.exit(1)
 
-    detail: Mapping[str, Any] = (
-        scraper.fetch_race_detail(race.url, use_cache) if race.url else {}
-    )
+    try:
+        detail: Mapping[str, Any] = (
+            scraper.fetch_race_detail(race.url, use_cache) if race.url else {}
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
 
     if subrace:
         matched = [
@@ -1172,9 +1231,13 @@ def subclass_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if sub is None:
         sys.exit(1)
 
-    detail: Mapping[str, Any] = (
-        scraper.fetch_subclass_detail(sub.url, use_cache) if sub.url else {}
-    )
+    try:
+        detail: Mapping[str, Any] = (
+            scraper.fetch_subclass_detail(sub.url, use_cache) if sub.url else {}
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
 
     if fmt == "json":
         sub.description = detail.get("description", "")
@@ -1224,9 +1287,13 @@ def item_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     if item is None:
         sys.exit(1)
 
-    detail: Mapping[str, Any] = (
-        scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
-    )
+    try:
+        detail: Mapping[str, Any] = (
+            scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
 
     if fmt == "json":
         item.description = detail.get("description", "")

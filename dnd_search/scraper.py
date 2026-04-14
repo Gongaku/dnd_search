@@ -424,7 +424,7 @@ def fetch_spell_detail(url: str, use_cache: bool = True) -> SpellDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return cast(SpellDetail, {})
+        raise RuntimeError(f"No parseable content found at {url}")
 
     detail: SpellDetail = {
         "source": "",
@@ -628,7 +628,7 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return cast(ClassDetail, {})
+        raise RuntimeError(f"No parseable content found at {url}")
 
     detail: ClassDetail = {
         "hit_die": "",
@@ -896,18 +896,14 @@ def _parse_misc_features(content: Tag) -> list[Feature]:
     return features
 
 
-def fetch_class_features(class_name: str, use_cache: bool = True) -> ClassFeatures:
+@_parse_cache("class_features")
+def fetch_class_features(url: str, use_cache: bool = True) -> ClassFeatures:
     """Fetch the full level progression table and feature descriptions for a class."""
-    slug = class_name.lower().strip()
-    url = f"{BASE_URL}/{slug}"
-    key = f"class_features:{slug}"
-    if use_cache and (hit := cache.get(key)):
-        return cast(ClassFeatures, json.loads(hit))
-
+    slug = url.rstrip("/").split("/")[-1].lower()
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return cast(ClassFeatures, {})
+        raise RuntimeError(f"No parseable content found at {url}")
 
     result: ClassFeatures = {"class_name": slug.title(), "url": url}
 
@@ -922,8 +918,6 @@ def fetch_class_features(class_name: str, use_cache: bool = True) -> ClassFeatur
     features = _parse_feature_descriptions(content)
     result["features"] = features
     logger.info(f"Fetched {len(features)} features for {slug}")
-    if use_cache:
-        cache.set(key, json.dumps(result))
     return result
 
 
@@ -952,18 +946,23 @@ def fetch_subclasses(
     # parsing full progression tables and feature descriptions just for source data.
     source_map: dict[str, str] = {}
     valid_urls: set[str] = set()
-    for cls in target_classes:
-        try:
-            cls_url = f"{BASE_URL}/{cls}"
-            data = fetch_class_detail(cls_url, use_cache)
-            for entry in data.get("subclasses", []):
-                if entry.get("url"):
-                    norm = _norm_url(entry["url"])
-                    valid_urls.add(norm)
-                    if entry.get("source"):
-                        source_map[norm] = entry["source"]
-        except Exception as e:
-            logger.debug(f"Could not fetch subclass sources for {cls}: {e}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {
+            pool.submit(fetch_class_detail, f"{BASE_URL}/{cls}", use_cache): cls
+            for cls in target_classes
+        }
+        for future in concurrent.futures.as_completed(futures):
+            cls = futures[future]
+            try:
+                data = future.result()
+                for entry in data.get("subclasses", []):
+                    if entry.get("url"):
+                        norm = _norm_url(entry["url"])
+                        valid_urls.add(norm)
+                        if entry.get("source"):
+                            source_map[norm] = entry["source"]
+            except Exception as e:
+                logger.debug(f"Could not fetch subclass sources for {cls}: {e}")
 
     for name, href in links:
         slug = href.lstrip("/")
@@ -1012,18 +1011,28 @@ def fetch_misc_links(use_cache: bool = True) -> list[MiscLink]:
     These are class-namespaced home page links that are NOT listed in any
     class page's official subclass table.
     """
+    _key = "misc_links"
+    if use_cache and (hit := cache.get(_key)):
+        return [MiscLink(**d) for d in json.loads(hit)]
+
     links = _fetch_home_links(use_cache)
 
-    # Build set of valid subclass URLs from all class pages.
+    # Build set of valid subclass URLs from all class pages in parallel.
     valid_urls: set[str] = set()
-    for cls in _BASE_CLASSES:
-        try:
-            data = fetch_class_detail(f"{BASE_URL}/{cls}", use_cache)
-            for entry in data.get("subclasses", []):
-                if entry.get("url"):
-                    valid_urls.add(_norm_url(entry["url"]))
-        except Exception as e:
-            logger.debug(f"fetch_misc_links: could not load {cls}: {e}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {
+            pool.submit(fetch_class_detail, f"{BASE_URL}/{cls}", use_cache): cls
+            for cls in _BASE_CLASSES
+        }
+        for future in concurrent.futures.as_completed(futures):
+            cls = futures[future]
+            try:
+                data = future.result()
+                for entry in data.get("subclasses", []):
+                    if entry.get("url"):
+                        valid_urls.add(_norm_url(entry["url"]))
+            except Exception as e:
+                logger.debug(f"fetch_misc_links: could not load {cls}: {e}")
 
     misc: list[MiscLink] = []
     seen: set[str] = set()
@@ -1056,6 +1065,8 @@ def fetch_misc_links(use_cache: bool = True) -> list[MiscLink]:
         misc.append(MiscLink(name=name, url=full_url, parent_class="Miscellaneous"))
 
     logger.info(f"Fetched {len(misc)} misc links")
+    if use_cache:
+        cache.set(_key, json.dumps([asdict(m) for m in misc]))
     return misc
 
 
@@ -1075,7 +1086,7 @@ def fetch_subclass_detail(url: str, use_cache: bool = True) -> SubclassDetailDic
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return cast(SubclassDetailDict, {})
+        raise RuntimeError(f"No parseable content found at {url}")
 
     detail: SubclassDetailDict = {
         "source": "",
@@ -1225,7 +1236,7 @@ def fetch_feat_detail(url: str, use_cache: bool = True) -> FeatDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return cast(FeatDetail, {})
+        raise RuntimeError(f"No parseable content found at {url}")
 
     detail: FeatDetail = {
         "source": "",
@@ -1387,7 +1398,7 @@ def fetch_race_detail(url: str, use_cache: bool = True) -> RaceDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return cast(RaceDetail, {})
+        raise RuntimeError(f"No parseable content found at {url}")
 
     # Result structure mirrors the page hierarchy:
     # base (before first h2) + subraces (one dict per h2)
@@ -1589,7 +1600,7 @@ def fetch_item_detail(url: str, use_cache: bool = True) -> ItemDetail:
     soup = _fetch(url, use_cache)
     content = _main_content(soup)
     if content is None:
-        return cast(ItemDetail, {})
+        raise RuntimeError(f"No parseable content found at {url}")
 
     detail: ItemDetail = {"source": "", "description": ""}
 

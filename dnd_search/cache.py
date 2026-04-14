@@ -1,5 +1,6 @@
 """Simple file-based HTTP response cache."""
 
+import base64
 import gzip
 import hashlib
 import json
@@ -15,7 +16,7 @@ CACHE_DIR = Path.home() / ".cache" / "dnd-search"
 # Bump this integer whenever the on-disk cache format changes (new keys,
 # restructured content, etc.).  Any entry written under an older version is
 # silently treated as a miss and overwritten.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 # TTLs — override via env vars (seconds).
 # Raw HTML pages (keyed by bare URL) refresh weekly by default.
@@ -53,7 +54,7 @@ def get(key: str) -> str | None:
         logger.debug(f"Cache hit for {key}")
         content = data["content"]
         if data.get("gz"):
-            content = gzip.decompress(bytes.fromhex(content)).decode("utf-8")
+            content = gzip.decompress(base64.b64decode(content)).decode("utf-8")
         return content
     except (json.JSONDecodeError, KeyError, OSError):
         return None
@@ -62,9 +63,10 @@ def get(key: str) -> str | None:
 def set(key: str, content: str) -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = _cache_path(key)
+    tmp = path.with_suffix(".tmp")
     try:
-        compressed = gzip.compress(content.encode("utf-8")).hex()
-        path.write_text(
+        compressed = base64.b64encode(gzip.compress(content.encode("utf-8"))).decode("ascii")
+        tmp.write_text(
             json.dumps(
                 {
                     "v": CACHE_VERSION,
@@ -75,9 +77,11 @@ def set(key: str, content: str) -> None:
             ),
             encoding="utf-8",
         )
+        tmp.replace(path)
         logger.debug(f"Cached response for {key}")
     except OSError as e:
         logger.warning(f"Failed to write cache: {e}")
+        tmp.unlink(missing_ok=True)
 
 
 def prune() -> int:
