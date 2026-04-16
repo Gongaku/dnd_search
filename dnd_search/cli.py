@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Shared options
 # ---------------------------------------------------------------------------
+def _norm_fmt(ctx, param, value: str) -> str:
+    """Normalize 'md' alias to 'markdown'."""
+    return "markdown" if value and value.lower() == "md" else value
+
+
 def _common_options(f):
     """Decorator that attaches shared options to a command."""
     f = click.option(
@@ -37,11 +42,13 @@ def _common_options(f):
         "-o",
         "fmt",
         type=click.Choice(
-            ["table", "text", "json", "markdown", "plain"], case_sensitive=False
+            ["table", "text", "json", "markdown", "md"], case_sensitive=False
         ),
         default="table",
         show_default=True,
-        help="Output format (table=rich, text=compact, markdown=PHB md, plain=PHB text).",
+        callback=_norm_fmt,
+        is_eager=False,
+        help="Output format (table=rich, text=plain text, markdown/md=PHB markdown).",
     )(f)
     return f
 
@@ -90,7 +97,7 @@ def _find_one(items: list, name: str, entity: str):
 
 
 _SINGULAR_FMT = click.Choice(
-    ["table", "json", "markdown", "plain"], case_sensitive=False
+    ["table", "json", "markdown", "md", "text"], case_sensitive=False
 )
 
 
@@ -268,15 +275,13 @@ def spells(
             formatters.format_spell_detail_markdown(results[0], detail_data)
         else:
             formatters.format_spells_markdown(results)
-    elif fmt == "plain":
+    elif fmt == "text":
         if detail and len(results) == 1:
-            formatters.format_spell_detail_plain(results[0], detail_data)
+            formatters.format_spell_detail_text(results[0], detail_data)
         else:
-            formatters.format_spells_plain(results)
+            formatters.format_spells_text(results)
     elif detail and len(results) == 1:
         formatters.format_spell_detail(results[0], detail_data)
-    elif fmt == "text":
-        formatters.format_spells_text(results)
     else:
         formatters.format_spells_table(results, show_url=detail)
 
@@ -353,15 +358,13 @@ def classes(ctx: click.Context, name: str, fmt: str, detail: bool, limit: int) -
             formatters.format_class_detail_markdown(results[0], detail_data)
         else:
             formatters.format_classes_markdown(results)
-    elif fmt == "plain":
+    elif fmt == "text":
         if detail and len(results) == 1:
-            formatters.format_class_detail_plain(results[0], detail_data)
+            formatters.format_class_detail_text(results[0], detail_data)
         else:
-            formatters.format_classes_plain(results)
+            formatters.format_classes_text(results)
     elif detail and len(results) == 1:
         formatters.format_class_detail(results[0], detail_data)
-    elif fmt == "text":
-        formatters.format_classes_text(results)
     else:
         formatters.format_classes_table(results, show_detail=detail)
 
@@ -445,8 +448,6 @@ def subclasses(
 
     if fmt == "markdown":
         formatters.format_subclasses_markdown(results)
-    elif fmt == "plain":
-        formatters.format_subclasses_plain(results)
     elif fmt == "text":
         formatters.format_subclasses_text(results)
     else:
@@ -539,15 +540,13 @@ def feats(
             formatters.format_feat_detail_markdown(results[0], detail_data)
         else:
             formatters.format_feats_markdown(results)
-    elif fmt == "plain":
+    elif fmt == "text":
         if detail and len(results) == 1:
-            formatters.format_feat_detail_plain(results[0], detail_data)
+            formatters.format_feat_detail_text(results[0], detail_data)
         else:
-            formatters.format_feats_plain(results)
+            formatters.format_feats_text(results)
     elif detail and len(results) == 1:
         formatters.format_feat_detail(results[0], detail_data)
-    elif fmt == "text":
-        formatters.format_feats_text(results)
     else:
         formatters.format_feats_table(results, show_url=detail)
 
@@ -659,15 +658,13 @@ def races(
             formatters.format_race_detail_markdown(results[0], detail_data)
         else:
             formatters.format_races_markdown(results)
-    elif fmt == "plain":
+    elif fmt == "text":
         if detail and len(results) == 1:
-            formatters.format_race_detail_plain(results[0], detail_data)
+            formatters.format_race_detail_text(results[0], detail_data)
         else:
-            formatters.format_races_plain(results)
+            formatters.format_races_text(results)
     elif detail and len(results) == 1:
         formatters.format_race_detail(results[0], detail_data)
-    elif fmt == "text":
-        formatters.format_races_text(results)
     else:
         formatters.format_races_table(results, show_url=detail)
 
@@ -782,15 +779,13 @@ def items(
             formatters.format_item_detail_markdown(results[0], detail_data)
         else:
             formatters.format_items_markdown(results)
-    elif fmt == "plain":
+    elif fmt == "text":
         if detail and len(results) == 1:
-            formatters.format_item_detail_plain(results[0], detail_data)
+            formatters.format_item_detail_text(results[0], detail_data)
         else:
-            formatters.format_items_plain(results)
+            formatters.format_items_text(results)
     elif detail and len(results) == 1:
         formatters.format_item_detail(results[0], detail_data)
-    elif fmt == "text":
-        formatters.format_items_text(results)
     else:
         formatters.format_items_table(results, show_url=detail)
 
@@ -856,10 +851,12 @@ def items(
     "--output",
     "-o",
     "fmt",
-    type=click.Choice(["table", "json", "markdown", "plain"], case_sensitive=False),
+    type=click.Choice(["table", "json", "markdown", "md", "text"], case_sensitive=False),
     default="table",
     show_default=True,
-    help="Output format (table=rich, markdown=PHB md, plain=PHB text).",
+    callback=_norm_fmt,
+    is_eager=False,
+    help="Output format (table=rich, markdown/md=PHB md, text=plain text).",
 )
 @click.pass_context
 def class_info(
@@ -950,8 +947,8 @@ def class_info(
         )
         return
 
-    if fmt == "plain":
-        formatters.format_class_plain(
+    if fmt == "text":
+        formatters.format_class_text(
             data,
             min_level=min_level,
             max_level=max_level,
@@ -1014,6 +1011,8 @@ def class_info(
     type=_SINGULAR_FMT,
     default="table",
     show_default=True,
+    callback=_norm_fmt,
+    is_eager=False,
     help="Output format.",
 )
 @click.pass_context
@@ -1027,7 +1026,7 @@ def spell_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     Examples:
       dnd-search spell fireball
       dnd-search spell "magic missile" --output markdown
-      dnd-search spell "eldritch blast" --output plain
+      dnd-search spell "eldritch blast" --output text
       dnd-search spell identify --output json
     """
     use_cache = not ctx.obj["no_cache"]
@@ -1056,8 +1055,8 @@ def spell_cmd(ctx: click.Context, name: str, fmt: str) -> None:
         formatters.output_json([spell])
     elif fmt == "markdown":
         formatters.format_spell_detail_markdown(spell, detail)
-    elif fmt == "plain":
-        formatters.format_spell_detail_plain(spell, detail)
+    elif fmt == "text":
+        formatters.format_spell_detail_text(spell, detail)
     else:
         formatters.format_spell_detail(spell, detail)
 
@@ -1071,6 +1070,8 @@ def spell_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     type=_SINGULAR_FMT,
     default="table",
     show_default=True,
+    callback=_norm_fmt,
+    is_eager=False,
     help="Output format.",
 )
 @click.pass_context
@@ -1084,7 +1085,7 @@ def feat_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     Examples:
       dnd-search feat "war caster"
       dnd-search feat actor --output markdown
-      dnd-search feat grappler --output plain
+      dnd-search feat grappler --output text
       dnd-search feat alert --output json
     """
     use_cache = not ctx.obj["no_cache"]
@@ -1112,8 +1113,8 @@ def feat_cmd(ctx: click.Context, name: str, fmt: str) -> None:
         formatters.output_json([feat])
     elif fmt == "markdown":
         formatters.format_feat_detail_markdown(feat, detail)
-    elif fmt == "plain":
-        formatters.format_feat_detail_plain(feat, detail)
+    elif fmt == "text":
+        formatters.format_feat_detail_text(feat, detail)
     else:
         formatters.format_feat_detail(feat, detail)
 
@@ -1133,6 +1134,8 @@ def feat_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     type=_SINGULAR_FMT,
     default="table",
     show_default=True,
+    callback=_norm_fmt,
+    is_eager=False,
     help="Output format.",
 )
 @click.pass_context
@@ -1148,7 +1151,7 @@ def race_cmd(ctx: click.Context, name: str, subrace: str, fmt: str) -> None:
       dnd-search race elf --subrace "dark elf"
       dnd-search race dwarf --subrace hill
       dnd-search race "half-orc" --output markdown
-      dnd-search race tiefling --output plain
+      dnd-search race tiefling --output text
       dnd-search race dragonborn --output json
     """
     use_cache = not ctx.obj["no_cache"]
@@ -1189,8 +1192,8 @@ def race_cmd(ctx: click.Context, name: str, subrace: str, fmt: str) -> None:
         formatters.output_json([race])
     elif fmt == "markdown":
         formatters.format_race_detail_markdown(race, detail)
-    elif fmt == "plain":
-        formatters.format_race_detail_plain(race, detail)
+    elif fmt == "text":
+        formatters.format_race_detail_text(race, detail)
     else:
         formatters.format_race_detail(race, detail)
 
@@ -1204,6 +1207,8 @@ def race_cmd(ctx: click.Context, name: str, subrace: str, fmt: str) -> None:
     type=_SINGULAR_FMT,
     default="table",
     show_default=True,
+    callback=_norm_fmt,
+    is_eager=False,
     help="Output format.",
 )
 @click.pass_context
@@ -1217,7 +1222,7 @@ def subclass_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     Examples:
       dnd-search subclass "battle master"
       dnd-search subclass evocation --output markdown
-      dnd-search subclass "arcane trickster" --output plain
+      dnd-search subclass "arcane trickster" --output text
       dnd-search subclass "oath of devotion" --output json
     """
     use_cache = not ctx.obj["no_cache"]
@@ -1245,8 +1250,8 @@ def subclass_cmd(ctx: click.Context, name: str, fmt: str) -> None:
         formatters.output_json([sub])
     elif fmt == "markdown":
         formatters.format_subclass_detail_markdown(sub, detail)
-    elif fmt == "plain":
-        formatters.format_subclass_detail_plain(sub, detail)
+    elif fmt == "text":
+        formatters.format_subclass_detail_text(sub, detail)
     else:
         formatters.format_subclass_detail(sub, detail)
 
@@ -1260,6 +1265,8 @@ def subclass_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     type=_SINGULAR_FMT,
     default="table",
     show_default=True,
+    callback=_norm_fmt,
+    is_eager=False,
     help="Output format.",
 )
 @click.pass_context
@@ -1273,7 +1280,7 @@ def item_cmd(ctx: click.Context, name: str, fmt: str) -> None:
     Examples:
       dnd-search item "vorpal sword"
       dnd-search item "bag of holding" --output markdown
-      dnd-search item "cloak of invisibility" --output plain
+      dnd-search item "cloak of invisibility" --output text
       dnd-search item "ring of protection" --output json
     """
     use_cache = not ctx.obj["no_cache"]
@@ -1301,8 +1308,8 @@ def item_cmd(ctx: click.Context, name: str, fmt: str) -> None:
         formatters.output_json([item])
     elif fmt == "markdown":
         formatters.format_item_detail_markdown(item, detail)
-    elif fmt == "plain":
-        formatters.format_item_detail_plain(item, detail)
+    elif fmt == "text":
+        formatters.format_item_detail_text(item, detail)
     else:
         formatters.format_item_detail(item, detail)
 
@@ -1391,10 +1398,12 @@ def cache_info() -> None:
     "-o",
     "fmt",
     type=click.Choice(
-        ["table", "text", "json", "markdown", "plain"], case_sensitive=False
+        ["table", "text", "json", "markdown", "md"], case_sensitive=False
     ),
     default="table",
     show_default=True,
+    callback=_norm_fmt,
+    is_eager=False,
     help="Output format.",
 )
 @click.pass_context
@@ -1427,8 +1436,6 @@ def misc(ctx: click.Context, name: str, feature: str, fmt: str) -> None:
             formatters.output_json(all_misc)
         elif fmt == "markdown":
             formatters.format_misc_markdown(all_misc)
-        elif fmt == "plain":
-            formatters.format_misc_plain(all_misc)
         elif fmt == "text":
             formatters.format_misc_text(all_misc)
         else:
@@ -1463,7 +1470,7 @@ def misc(ctx: click.Context, name: str, feature: str, fmt: str) -> None:
         formatters.output_json(features)
     elif fmt == "markdown":
         formatters.format_misc_detail_markdown(link, features)
-    elif fmt == "plain":
-        formatters.format_misc_detail_plain(link, features)
+    elif fmt == "text":
+        formatters.format_misc_detail_text(link, features)
     else:
         formatters.format_misc_detail(link, features)

@@ -238,7 +238,7 @@ def _render_blocks_rich(blocks: list, *, detect_dc: bool = False) -> list[str]:
     return parts
 
 
-_Fmt = Literal["markdown", "plain"]
+_Fmt = Literal["markdown", "text"]
 
 
 def _print_description(text: str, text_md: str | None, fmt: _Fmt) -> None:
@@ -401,17 +401,6 @@ def format_spell_detail(spell: Spell, detail: Mapping[str, Any]) -> None:
     )
 
 
-def format_spells_text(spells: list[Spell]) -> None:
-    for spell in spells:
-        tags = _spell_tag_list(spell)
-        tag_str = f" [{', '.join(tags)}]" if tags else ""
-        console.print(
-            f"[bold cyan]{spell.name}[/bold cyan]{tag_str} - "
-            f"[bright_green]{_level_str(spell.level)}[/bright_green] "
-            f"[magenta]{spell.school}[/magenta]"
-        )
-
-
 # ---------------------------------------------------------------------------
 # Class formatters
 # ---------------------------------------------------------------------------
@@ -555,12 +544,6 @@ def format_class_header_panel(class_name: str, detail: Mapping[str, Any]) -> Non
     )
 
 
-def format_classes_text(classes: list[DnDClass]) -> None:
-    for cls in classes:
-        hd = f" [bright_green]{cls.hit_die}[/bright_green]" if cls.hit_die else ""
-        console.print(f"[bold cyan]{cls.name}[/bold cyan]{hd}")
-
-
 # ---------------------------------------------------------------------------
 # Subclass formatters
 # ---------------------------------------------------------------------------
@@ -587,16 +570,6 @@ def format_subclasses_table(subclasses: list[Subclass], show_url: bool = False) 
         table.add_row(*row)
 
     console.print(table)
-
-
-def format_subclasses_text(subclasses: list[Subclass]) -> None:
-    for sub in subclasses:
-        cls_str = (
-            f" [bright_green]({sub.parent_class})[/bright_green]"
-            if sub.parent_class
-            else ""
-        )
-        console.print(f"[bold cyan]{sub.name}[/bold cyan]{cls_str}")
 
 
 def format_subclass_detail(sub: Subclass, detail: Mapping[str, Any]) -> None:
@@ -700,12 +673,6 @@ def format_feat_detail(feat: Feat, detail: Mapping[str, Any]) -> None:
     )
 
 
-def format_feats_text(feats: list[Feat]) -> None:
-    for feat in feats:
-        pre = f" [dim]({feat.prerequisites})[/dim]" if feat.prerequisites else ""
-        console.print(f"[bold cyan]{feat.name}[/bold cyan]{pre}")
-
-
 # ---------------------------------------------------------------------------
 # Race formatters
 # ---------------------------------------------------------------------------
@@ -788,12 +755,6 @@ def format_race_detail(race: Race, detail: Mapping[str, Any]) -> None:
     )
 
 
-def format_races_text(races: list[Race]) -> None:
-    for race in races:
-        size = f" [bright_green]{race.size}[/bright_green]" if race.size else ""
-        console.print(f"[bold cyan]{race.name}[/bold cyan]{size}")
-
-
 # ---------------------------------------------------------------------------
 # Item formatters
 # ---------------------------------------------------------------------------
@@ -861,12 +822,6 @@ def format_item_detail(item: Item, detail: Mapping[str, Any]) -> None:
             title_align="center",
         )
     )
-
-
-def format_items_text(items: list[Item]) -> None:
-    for item in items:
-        rarity = f" [magenta]{item.rarity}[/magenta]" if item.rarity else ""
-        console.print(f"[bold cyan]{item.name}[/bold cyan]{rarity}")
 
 
 # ---------------------------------------------------------------------------
@@ -1055,8 +1010,8 @@ def format_spells_markdown(spells: list[Spell], detail_map: dict | None = None) 
     _format_spells_list(spells, "markdown")
 
 
-def format_spells_plain(spells: list[Spell], detail_map: dict | None = None) -> None:
-    _format_spells_list(spells, "plain")
+def format_spells_text(spells: list[Spell], detail_map: dict | None = None) -> None:
+    _format_spells_list(spells, "text")
 
 
 def _format_spell_detail(spell: Spell, detail: Mapping[str, Any], fmt: _Fmt) -> None:
@@ -1102,7 +1057,7 @@ def _format_spell_detail(spell: Spell, detail: Mapping[str, Any], fmt: _Fmt) -> 
         ahl = ahl_raw or detail["at_higher_levels"]
         label, _, body = ahl.partition(".")
         if fmt == "markdown":
-            print(f"\n{_wrap_md(f'**{label}.** {body.lstrip()}')}")
+            print(f"\n{_wrap_md(f'{label}.{body.lstrip()}')}")
         else:
             print(_wrap(f"{label}. {body.lstrip()}"))
             print()
@@ -1117,8 +1072,8 @@ def format_spell_detail_markdown(spell: Spell, detail: Mapping[str, Any]) -> Non
     _format_spell_detail(spell, detail, "markdown")
 
 
-def format_spell_detail_plain(spell: Spell, detail: Mapping[str, Any]) -> None:
-    _format_spell_detail(spell, detail, "plain")
+def format_spell_detail_text(spell: Spell, detail: Mapping[str, Any]) -> None:
+    _format_spell_detail(spell, detail, "text")
 
 
 def _format_classes_list(classes: list[DnDClass], fmt: _Fmt) -> None:
@@ -1144,8 +1099,8 @@ def format_classes_markdown(classes: list[DnDClass]) -> None:
     _format_classes_list(classes, "markdown")
 
 
-def format_classes_plain(classes: list[DnDClass]) -> None:
-    _format_classes_list(classes, "plain")
+def format_classes_text(classes: list[DnDClass]) -> None:
+    _format_classes_list(classes, "text")
 
 
 def _format_class_detail(cls: DnDClass, detail: Mapping[str, Any], fmt: _Fmt) -> None:
@@ -1187,8 +1142,8 @@ def format_class_detail_markdown(cls: DnDClass, detail: Mapping[str, Any]) -> No
     _format_class_detail(cls, detail, "markdown")
 
 
-def format_class_detail_plain(cls: DnDClass, detail: Mapping[str, Any]) -> None:
-    _format_class_detail(cls, detail, "plain")
+def format_class_detail_text(cls: DnDClass, detail: Mapping[str, Any]) -> None:
+    _format_class_detail(cls, detail, "text")
 
 
 def _format_subclasses_list(subclasses: list[Subclass], fmt: _Fmt) -> None:
@@ -1214,8 +1169,8 @@ def format_subclasses_markdown(subclasses: list[Subclass]) -> None:
     _format_subclasses_list(subclasses, "markdown")
 
 
-def format_subclasses_plain(subclasses: list[Subclass]) -> None:
-    _format_subclasses_list(subclasses, "plain")
+def format_subclasses_text(subclasses: list[Subclass]) -> None:
+    _format_subclasses_list(subclasses, "text")
 
 
 def _format_subclass_detail(
@@ -1266,8 +1221,8 @@ def format_subclass_detail_markdown(sub: Subclass, detail: Mapping[str, Any]) ->
     _format_subclass_detail(sub, detail, "markdown")
 
 
-def format_subclass_detail_plain(sub: Subclass, detail: Mapping[str, Any]) -> None:
-    _format_subclass_detail(sub, detail, "plain")
+def format_subclass_detail_text(sub: Subclass, detail: Mapping[str, Any]) -> None:
+    _format_subclass_detail(sub, detail, "text")
 
 
 def _format_feats_list(feats: list[Feat], fmt: _Fmt) -> None:
@@ -1293,8 +1248,8 @@ def format_feats_markdown(feats: list[Feat]) -> None:
     _format_feats_list(feats, "markdown")
 
 
-def format_feats_plain(feats: list[Feat]) -> None:
-    _format_feats_list(feats, "plain")
+def format_feats_text(feats: list[Feat]) -> None:
+    _format_feats_list(feats, "text")
 
 
 def _format_feat_detail(feat: Feat, detail: Mapping[str, Any], fmt: _Fmt) -> None:
@@ -1326,7 +1281,7 @@ def _format_feat_detail(feat: Feat, detail: Mapping[str, Any], fmt: _Fmt) -> Non
                 print(f"- {benefit}")
             else:
                 print(_wrap(benefit, indent="  * ", hang="    "))
-        if fmt == "plain":
+        if fmt == "text":
             print()
 
 
@@ -1334,8 +1289,8 @@ def format_feat_detail_markdown(feat: Feat, detail: Mapping[str, Any]) -> None:
     _format_feat_detail(feat, detail, "markdown")
 
 
-def format_feat_detail_plain(feat: Feat, detail: Mapping[str, Any]) -> None:
-    _format_feat_detail(feat, detail, "plain")
+def format_feat_detail_text(feat: Feat, detail: Mapping[str, Any]) -> None:
+    _format_feat_detail(feat, detail, "text")
 
 
 def _format_races_list(races: list[Race], fmt: _Fmt) -> None:
@@ -1361,8 +1316,8 @@ def format_races_markdown(races: list[Race]) -> None:
     _format_races_list(races, "markdown")
 
 
-def format_races_plain(races: list[Race]) -> None:
-    _format_races_list(races, "plain")
+def format_races_text(races: list[Race]) -> None:
+    _format_races_list(races, "text")
 
 
 def _format_race_detail(race: Race, detail: Mapping[str, Any], fmt: _Fmt) -> None:
@@ -1402,7 +1357,7 @@ def _format_race_detail(race: Race, detail: Mapping[str, Any], fmt: _Fmt) -> Non
             print("-------------")
         for t in detail["traits"]:
             print(_fmt_trait(t, fmt))
-        if fmt == "plain":
+        if fmt == "text":
             print()
     for subrace in detail.get("subraces", []):
         sub_name = subrace.get("name", "")
@@ -1426,7 +1381,7 @@ def _format_race_detail(race: Race, detail: Mapping[str, Any], fmt: _Fmt) -> Non
                 print()
             for t in subrace["traits"]:
                 print(_fmt_trait(t, fmt))
-            if fmt == "plain":
+            if fmt == "text":
                 print()
         if subrace.get("spell_table"):
             print()
@@ -1442,8 +1397,8 @@ def format_race_detail_markdown(race: Race, detail: Mapping[str, Any]) -> None:
     _format_race_detail(race, detail, "markdown")
 
 
-def format_race_detail_plain(race: Race, detail: Mapping[str, Any]) -> None:
-    _format_race_detail(race, detail, "plain")
+def format_race_detail_text(race: Race, detail: Mapping[str, Any]) -> None:
+    _format_race_detail(race, detail, "text")
 
 
 def _format_items_list(items: list[Item], fmt: _Fmt) -> None:
@@ -1471,8 +1426,8 @@ def format_items_markdown(items: list[Item]) -> None:
     _format_items_list(items, "markdown")
 
 
-def format_items_plain(items: list[Item]) -> None:
-    _format_items_list(items, "plain")
+def format_items_text(items: list[Item]) -> None:
+    _format_items_list(items, "text")
 
 
 def _format_item_detail(item: Item, detail: Mapping[str, Any], fmt: _Fmt) -> None:
@@ -1505,8 +1460,8 @@ def format_item_detail_markdown(item: Item, detail: Mapping[str, Any]) -> None:
     _format_item_detail(item, detail, "markdown")
 
 
-def format_item_detail_plain(item: Item, detail: Mapping[str, Any]) -> None:
-    _format_item_detail(item, detail, "plain")
+def format_item_detail_text(item: Item, detail: Mapping[str, Any]) -> None:
+    _format_item_detail(item, detail, "text")
 
 
 def _format_class_output(
@@ -1609,7 +1564,7 @@ def format_class_markdown(
     )
 
 
-def format_class_plain(
+def format_class_text(
     data: Mapping[str, Any],
     min_level: int = 1,
     max_level: int = 20,
@@ -1619,7 +1574,7 @@ def format_class_plain(
     show_subclasses: bool = True,
 ) -> None:
     _format_class_output(
-        data, "plain",
+        data, "text",
         min_level=min_level, max_level=max_level,
         show_table=show_table, show_features=show_features,
         feature_filter=feature_filter, show_subclasses=show_subclasses,
@@ -1643,16 +1598,6 @@ def format_misc_table(items: list[MiscLink]) -> None:
     for item in items:
         table.add_row(item.name, item.parent_class)
     console.print(table)
-
-
-def format_misc_text(items: list[MiscLink]) -> None:
-    for item in items:
-        cls_str = (
-            f" [bright_green]({item.parent_class})[/bright_green]"
-            if item.parent_class
-            else ""
-        )
-        console.print(f"[bold cyan]{item.name}[/bold cyan]{cls_str}")
 
 
 def format_misc_detail(link: MiscLink, features: list) -> None:
@@ -1701,18 +1646,18 @@ def format_misc_detail_markdown(link: MiscLink, features: list) -> None:
         print()
 
 
-def format_misc_plain(items: list[MiscLink]) -> None:
+def format_misc_text(items: list[MiscLink]) -> None:
     headers = ["Name", "Class"]
     rows = [[i.name, i.parent_class] for i in items]
     print(_plain_table(headers, rows))
 
 
-def format_misc_detail_plain(link: MiscLink, features: list) -> None:
+def format_misc_detail_text(link: MiscLink, features: list) -> None:
     print(f"{link.name.upper()}")
     if link.parent_class:
         print(f"Class: {link.parent_class}")
     print()
     for feat in features:
         print(feat["name"].upper())
-        _print_blocks(feat.get("body", []), "plain")
+        _print_blocks(feat.get("body", []), "text")
         print()
