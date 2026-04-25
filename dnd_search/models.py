@@ -120,6 +120,7 @@ class RaceDetail(TypedDict):
 class ItemDetail(TypedDict):
     source: str
     description: str
+    description_md: str
 
 
 class ClassFeatures(TypedDict, total=False):

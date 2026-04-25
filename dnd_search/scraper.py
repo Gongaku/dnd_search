@@ -229,13 +229,13 @@ def _para_inline(
             )
             if href.startswith("/"):
                 href = BASE_URL + href
-            parts.append(f"[{link_text}]({href})" if link_text else "")
+            parts.append(f" [{link_text}]({href}) " if link_text else "")
         elif name in ("strong", "b"):
             inner = _para_inline(child, bold, italic, links)
-            parts.append(f"{bold[0]}{inner}{bold[1]}")
+            parts.append(f" {bold[0]}{inner}{bold[1]} ")
         elif name in ("em", "i"):
             inner = _para_inline(child, bold, italic, links)
-            parts.append(f"{italic[0]}{inner}{italic[1]}")
+            parts.append(f" {italic[0]}{inner}{italic[1]} ")
         elif hasattr(child, "get_text"):
             parts.append(child.get_text(separator=" "))
         else:
@@ -1602,10 +1602,10 @@ def fetch_item_detail(url: str, use_cache: bool = True) -> ItemDetail:
     if content is None:
         raise RuntimeError(f"No parseable content found at {url}")
 
-    detail: ItemDetail = {"source": "", "description": ""}
+    detail: ItemDetail = {"source": "", "description": "", "description_md": ""}
 
     for p in content.find_all("p"):
-        text = p.get_text(strip=True)
+        text = _text(p)
         if not text:
             continue
         low = text.lower()
@@ -1625,9 +1625,12 @@ def fetch_item_detail(url: str, use_cache: bool = True) -> ItemDetail:
         ):
             continue
 
+        md_text = _para_md(p)
         if detail["description"]:
             detail["description"] += "\n\n" + text
+            detail["description_md"] += "\n\n" + md_text
         else:
             detail["description"] = text
+            detail["description_md"] = md_text
 
     return detail

@@ -1453,7 +1453,7 @@ def _format_item_detail(item: Item, detail: Mapping[str, Any], fmt: _Fmt) -> Non
             print(", ".join(parts))
         print()
     if detail.get("description"):
-        _print_description(detail["description"], None, fmt)
+        _print_description(detail["description"], detail.get("description_md"), fmt)
 
 
 def format_item_detail_markdown(item: Item, detail: Mapping[str, Any]) -> None:

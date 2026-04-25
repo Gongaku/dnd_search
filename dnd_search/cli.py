@@ -1,6 +1,7 @@
 """Main CLI entry point for dnd-search."""
 
 import concurrent.futures
+import importlib.metadata
 import logging
 import sys
 from collections.abc import Mapping
@@ -13,6 +14,11 @@ from dnd_search import cache, formatters, logger as log_setup, scraper
 
 console = Console()
 logger = logging.getLogger(__name__)
+
+try:
+    _version = importlib.metadata.version("dnd-search")
+except importlib.metadata.PackageNotFoundError:
+    _version = "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +113,7 @@ _SINGULAR_FMT = click.Choice(
 
 
 @click.group()
+@click.version_option(version=_version)
 @click.option("--debug", is_flag=True, default=False, help="Enable debug output.")
 @click.option(
     "--verbose",
