@@ -1,6 +1,6 @@
 # dnd-search
 
-A command-line tool for looking up D&D 5e (2014) content — spells, classes, subclasses, feats, races, and magic items — pulled live from [dnd5e.wikidot.com](https://dnd5e.wikidot.com).
+A command-line tool for looking up D&D 5e (2014) content — spells, classes, subclasses, feats, races, magic items, and class features — pulled live from [dnd5e.wikidot.com](https://dnd5e.wikidot.com).
 
 ---
 
@@ -40,14 +40,15 @@ These search across all entries and support filtering, sorting, and output forma
 | `dnd-search feats` | All feats |
 | `dnd-search races` | All races and lineages |
 | `dnd-search items` | All magic items |
+| `dnd-search misc` | Class quick-reference features (invocations, infusions, maneuvers, etc.) |
 
 **Common options (all listing commands)**
 
 | Option | Description |
 |---|---|
-| `-n`, `--name TEXT` | Filter by name (partial match) |
+| `-n`, `--name TEXT` | Filter by name (partial, case-insensitive) |
 | `--source TEXT` | Filter by source book (partial match) |
-| `-o`, `--output FORMAT` | Output format: `table` (default), `text`, `json`, `markdown`, `plain` |
+| `-o`, `--output FORMAT` | Output format: `table` (default), `text`, `json`, `markdown` / `md` |
 | `-d`, `--detail` | Fetch and show full description for each result |
 | `--limit N` | Cap the number of results (0 = no limit) |
 
@@ -64,6 +65,7 @@ dnd-search spells --ritual
 ```bash
 dnd-search subclasses --class rogue
 dnd-search subclasses --sort class          # sort by parent class
+dnd-search subclasses --sort name
 ```
 
 **Item-specific filters**
@@ -86,6 +88,15 @@ dnd-search races --subrace "dark elf"
 dnd-search feats --prerequisite spellcasting
 ```
 
+**Misc-specific filters**
+
+```bash
+dnd-search misc                                        # list all categories
+dnd-search misc "eldritch invocations"
+dnd-search misc "eldritch invocations" --feature "agonizing blast"
+dnd-search misc infusions --output markdown
+```
+
 ---
 
 ### Detail commands
@@ -99,7 +110,11 @@ dnd-search spell "magic missile" --output markdown
 dnd-search class fighter
 dnd-search class wizard --min-level 5 --max-level 10
 dnd-search class rogue --feature "sneak attack"
+dnd-search class cleric --no-features
+dnd-search class fighter --only-table
 dnd-search class paladin --only-subclasses
+dnd-search class druid --only-features
+dnd-search class barbarian --only-header
 
 dnd-search subclass "battle master"
 dnd-search subclass evocation --output plain
@@ -114,6 +129,20 @@ dnd-search item "bag of holding"
 dnd-search item "vorpal sword" --output markdown
 ```
 
+**Class-specific options**
+
+| Option | Description |
+|---|---|
+| `-m`, `--min-level N` | Show progression from this level onward (1–20) |
+| `-M`, `--max-level N` | Show progression up to this level (1–20) |
+| `--features` / `--no-features` | Show or hide class feature descriptions |
+| `-F`, `--feature TEXT` | Filter feature descriptions by name (partial match) |
+| `--subclasses` / `--no-subclasses` | Show or hide the subclass list |
+| `--only-table` | Show only the progression table |
+| `--only-subclasses` | Show only the subclass list |
+| `--only-features` | Show only the class features |
+| `--only-header` | Show only the class overview panel |
+
 ---
 
 ### Output formats
@@ -121,9 +150,8 @@ dnd-search item "vorpal sword" --output markdown
 | Format | Description |
 |---|---|
 | `table` | Rich colored table in the terminal (default) |
-| `text` | Compact one-line-per-result list |
-| `markdown` | PHB-style Markdown, suitable for piping to a file |
-| `plain` | Plain text, no color, no special characters |
+| `text` | Compact one-line-per-result list, no color |
+| `markdown` / `md` | PHB-style Markdown, suitable for piping to a file |
 | `json` | Machine-readable JSON |
 
 ---
@@ -145,7 +173,8 @@ dnd-search cache clear   # Delete everything
 These go before the command name:
 
 ```bash
-dnd-search --no-cache spells --name fireball   # Always fetch fresh data
+dnd-search --version                            # Print the current version
+dnd-search --no-cache spells --name fireball    # Always fetch fresh data
 dnd-search -v spells                            # Show info messages
 dnd-search -vv spells                           # Show debug messages
 dnd-search -vvv spells                          # Debug + HTTP tracing
