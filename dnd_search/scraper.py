@@ -821,9 +821,14 @@ def _parse_feature_descriptions(content: Tag) -> list[Feature]:
 
         elif el.name in ("p", "ul", "ol") and current is not None:
             if el.name in ("ul", "ol"):
-                items = [_text(li) for li in el.find_all("li") if _text(li)]
-                if items:
-                    current["body"].append({"type": "list", "items": items})
+                if not el.find_parent("li"):
+                    items = [
+                        _text(li)
+                        for li in el.find_all("li", recursive=False)
+                        if _text(li)
+                    ]
+                    if items:
+                        current["body"].append({"type": "list", "items": items})
             else:
                 current["body"].append(
                     {
@@ -884,9 +889,14 @@ def _parse_misc_features(content: Tag) -> list[Feature]:
 
         elif el.name in ("p", "ul", "ol") and current is not None:
             if el.name in ("ul", "ol"):
-                items = [_text(li) for li in el.find_all("li") if _text(li)]
-                if items:
-                    current["body"].append({"type": "list", "items": items})
+                if not el.find_parent("li"):
+                    items = [
+                        _text(li)
+                        for li in el.find_all("li", recursive=False)
+                        if _text(li)
+                    ]
+                    if items:
+                        current["body"].append({"type": "list", "items": items})
             else:
                 current["body"].append(
                     {
