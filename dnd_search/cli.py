@@ -519,7 +519,11 @@ def feats(
 
             def _enrich_feat(feat):
                 try:
-                    d = scraper.fetch_feat_detail(feat.url, use_cache) if feat.url else {}
+                    d = (
+                        scraper.fetch_feat_detail(feat.url, use_cache)
+                        if feat.url
+                        else {}
+                    )
                 except RuntimeError as e:
                     logger.warning(f"Could not fetch detail for {feat.name}: {e}")
                     d = {}
@@ -642,7 +646,11 @@ def races(
         if detail:
             for race in results:
                 try:
-                    d = scraper.fetch_race_detail(race.url, use_cache) if race.url else {}
+                    d = (
+                        scraper.fetch_race_detail(race.url, use_cache)
+                        if race.url
+                        else {}
+                    )
                 except RuntimeError as e:
                     logger.warning(f"Could not fetch detail for {race.name}: {e}")
                     d = {}
@@ -758,7 +766,11 @@ def items(
 
             def _enrich_item(item):
                 try:
-                    d = scraper.fetch_item_detail(item.url, use_cache) if item.url else {}
+                    d = (
+                        scraper.fetch_item_detail(item.url, use_cache)
+                        if item.url
+                        else {}
+                    )
                 except RuntimeError as e:
                     logger.warning(f"Could not fetch detail for {item.name}: {e}")
                     d = {}
@@ -852,13 +864,18 @@ def items(
     "--only-features", is_flag=True, default=False, help="Show only the class features."
 )
 @click.option(
-    "--only-header", is_flag=True, default=False, help="Show only the class overview panel."
+    "--only-header",
+    is_flag=True,
+    default=False,
+    help="Show only the class overview panel.",
 )
 @click.option(
     "--output",
     "-o",
     "fmt",
-    type=click.Choice(["table", "json", "markdown", "md", "text"], case_sensitive=False),
+    type=click.Choice(
+        ["table", "json", "markdown", "md", "text"], case_sensitive=False
+    ),
     default="table",
     show_default=True,
     callback=_norm_fmt,

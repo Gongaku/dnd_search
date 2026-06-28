@@ -583,7 +583,7 @@ def _fetch_section_links(
     except ValueError:
         return []
 
-    for el in all_elements[start + 1:]:
+    for el in all_elements[start + 1 :]:
         if el.name in HEADING_TAGS and int(el.name[1]) <= section_level:
             break
         if el.name == "a":
@@ -659,7 +659,9 @@ def fetch_class_detail(url: str, use_cache: bool = True) -> ClassDetail:
             nxt = el.find_next_sibling(["ul", "ol"])
             if nxt:
                 items = [_text(li) for li in nxt.find_all("li") if _text(li)]
-                detail["equipment"] = t + "\n" + "\n".join(f"• {item}" for item in items)
+                detail["equipment"] = (
+                    t + "\n" + "\n".join(f"• {item}" for item in items)
+                )
             else:
                 detail["equipment"] = t
         children = list(el.children)
@@ -851,7 +853,9 @@ def _parse_misc_features(content: Tag) -> list[Feature]:
     features: list[Feature] = []
     current: Feature | None = None
 
-    for el in content.find_all(["h1", "h2", "h3", "h4", "h5", "p", "ul", "ol", "table"]):
+    for el in content.find_all(
+        ["h1", "h2", "h3", "h4", "h5", "p", "ul", "ol", "table"]
+    ):
         text = el.get_text(strip=True)
         if not text:
             continue
@@ -874,7 +878,9 @@ def _parse_misc_features(content: Tag) -> list[Feature]:
         elif el.name == "table" and current is not None:
             headers, rows = _parse_progression_table(el)
             if headers:
-                current["body"].append({"type": "table", "headers": headers, "rows": rows})
+                current["body"].append(
+                    {"type": "table", "headers": headers, "rows": rows}
+                )
 
         elif el.name in ("p", "ul", "ol") and current is not None:
             if el.name in ("ul", "ol"):

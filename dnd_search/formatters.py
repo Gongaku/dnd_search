@@ -274,7 +274,9 @@ def _print_blocks(blocks: list, fmt: _Fmt) -> None:
         elif btype == "list":
             for item in block.get("items", []):
                 if fmt == "markdown":
-                    print(textwrap.fill(f"- {item}", width=_WRAP, subsequent_indent="  "))
+                    print(
+                        textwrap.fill(f"- {item}", width=_WRAP, subsequent_indent="  ")
+                    )
                 else:
                     print(_wrap(item, indent="  * ", hang="    "))
             print()
@@ -300,9 +302,7 @@ def _print_blocks(blocks: list, fmt: _Fmt) -> None:
                         max(len(r[c]) if c < len(r) else 0 for r in all_rows)
                         for c in range(len(headers))
                     ]
-                    print(
-                        "  ".join(f"{h:<{widths[i]}}" for i, h in enumerate(headers))
-                    )
+                    print("  ".join(f"{h:<{widths[i]}}" for i, h in enumerate(headers)))
                     print("  ".join("-" * widths[i] for i in range(len(headers))))
                     for row in rows:
                         print(
@@ -493,7 +493,9 @@ def format_class_header_panel(class_name: str, detail: Mapping[str, Any]) -> Non
         if hp1:
             lines.append(f"  [bold yellow]Hit Points at 1st Level:[/bold yellow] {hp1}")
         if hpN:
-            lines.append(f"  [bold yellow]Hit Points at Higher Levels:[/bold yellow] {hpN}")
+            lines.append(
+                f"  [bold yellow]Hit Points at Higher Levels:[/bold yellow] {hpN}"
+            )
 
     # Proficiencies
     prof_fields = [
@@ -514,10 +516,14 @@ def format_class_header_panel(class_name: str, detail: Mapping[str, Any]) -> Non
                 if " from " in val.lower():
                     idx = val.lower().index(" from ")
                     preamble = val[:idx].strip()
-                    skill_str = val[idx + len(" from "):].strip().rstrip(".")
+                    skill_str = val[idx + len(" from ") :].strip().rstrip(".")
                     # Split on commas, strip "and" from last item
-                    skills = [s.strip().lstrip("and ").strip() for s in skill_str.split(",")]
-                    lines.append(f"  [bold yellow]{label}:[/bold yellow] {preamble} from:")
+                    skills = [
+                        s.strip().lstrip("and ").strip() for s in skill_str.split(",")
+                    ]
+                    lines.append(
+                        f"  [bold yellow]{label}:[/bold yellow] {preamble} from:"
+                    )
                     for skill in skills:
                         if skill:
                             lines.append(f"    • {skill}")
@@ -985,6 +991,7 @@ def format_class_subclasses(data: Mapping[str, Any]) -> None:
 # Unified markdown + plain-text formatters
 # ---------------------------------------------------------------------------
 
+
 def _format_spells_list(spells: list[Spell], fmt: _Fmt) -> None:
     count = len(spells)
     title = f"Spells ({count} result{'s' if count != 1 else ''})"
@@ -993,17 +1000,32 @@ def _format_spells_list(spells: list[Spell], fmt: _Fmt) -> None:
     else:
         print(_plain_h1(title))
         print()
-    headers = ["Name", "Level", "School", "Casting Time",
-               "Range", "Duration", "Components", "Tags"]
+    headers = [
+        "Name",
+        "Level",
+        "School",
+        "Casting Time",
+        "Range",
+        "Duration",
+        "Components",
+        "Tags",
+    ]
     rows = [
         [
             f"[{s.name}]({s.url})" if (fmt == "markdown" and s.url) else s.name,
-            _phb_level(s.level), s.school, s.casting_time,
-            s.range, s.duration, s.components, _tags(s),
+            _phb_level(s.level),
+            s.school,
+            s.casting_time,
+            s.range,
+            s.duration,
+            s.components,
+            _tags(s),
         ]
         for s in spells
     ]
-    print(_md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows))
+    print(
+        _md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows)
+    )
 
 
 def format_spells_markdown(spells: list[Spell], detail_map: dict | None = None) -> None:
@@ -1049,9 +1071,7 @@ def _format_spell_detail(spell: Spell, detail: Mapping[str, Any], fmt: _Fmt) -> 
         print(f"{'Duration:':<{lw}} {spell.duration}")
     print()
     if detail.get("description"):
-        _print_description(
-            detail["description"], detail.get("description_md"), fmt
-        )
+        _print_description(detail["description"], detail.get("description_md"), fmt)
     if detail.get("at_higher_levels"):
         ahl_raw = detail.get("at_higher_levels_md") if fmt == "markdown" else None
         ahl = ahl_raw or detail["at_higher_levels"]
@@ -1088,11 +1108,15 @@ def _format_classes_list(classes: list[DnDClass], fmt: _Fmt) -> None:
     rows = [
         [
             f"[{c.name}]({c.url})" if (fmt == "markdown" and c.url) else c.name,
-            c.hit_die, c.primary_ability, c.saving_throws,
+            c.hit_die,
+            c.primary_ability,
+            c.saving_throws,
         ]
         for c in classes
     ]
-    print(_md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows))
+    print(
+        _md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows)
+    )
 
 
 def format_classes_markdown(classes: list[DnDClass]) -> None:
@@ -1135,7 +1159,11 @@ def _format_class_detail(cls: DnDClass, detail: Mapping[str, Any], fmt: _Fmt) ->
             print()
         headers = ["Name", "Source"]
         rows = [[s["name"], s.get("source", "")] for s in detail["subclasses"]]
-        print(_md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows))
+        print(
+            _md_table(headers, rows)
+            if fmt == "markdown"
+            else _plain_table(headers, rows)
+        )
 
 
 def format_class_detail_markdown(cls: DnDClass, detail: Mapping[str, Any]) -> None:
@@ -1158,11 +1186,14 @@ def _format_subclasses_list(subclasses: list[Subclass], fmt: _Fmt) -> None:
     rows = [
         [
             f"[{s.name}]({s.url})" if (fmt == "markdown" and s.url) else s.name,
-            s.parent_class, s.source,
+            s.parent_class,
+            s.source,
         ]
         for s in subclasses
     ]
-    print(_md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows))
+    print(
+        _md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows)
+    )
 
 
 def format_subclasses_markdown(subclasses: list[Subclass]) -> None:
@@ -1196,9 +1227,7 @@ def _format_subclass_detail(
         print()
     if detail.get("description"):
         print()
-        _print_description(
-            detail["description"], detail.get("description_md"), fmt
-        )
+        _print_description(detail["description"], detail.get("description_md"), fmt)
     spell_tbl_fmt = _md_table if fmt == "markdown" else _plain_table
     for feat in detail.get("features", []):
         if fmt == "markdown":
@@ -1237,11 +1266,14 @@ def _format_feats_list(feats: list[Feat], fmt: _Fmt) -> None:
     rows = [
         [
             f"[{f.name}]({f.url})" if (fmt == "markdown" and f.url) else f.name,
-            f.prerequisites or "None", f.source,
+            f.prerequisites or "None",
+            f.source,
         ]
         for f in feats
     ]
-    print(_md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows))
+    print(
+        _md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows)
+    )
 
 
 def format_feats_markdown(feats: list[Feat]) -> None:
@@ -1271,9 +1303,7 @@ def _format_feat_detail(feat: Feat, detail: Mapping[str, Any], fmt: _Fmt) -> Non
         print(f"Prerequisite: {prereq}")
         print()
     if detail.get("description"):
-        _print_description(
-            detail["description"], detail.get("description_md"), fmt
-        )
+        _print_description(detail["description"], detail.get("description_md"), fmt)
     if detail.get("benefits"):
         print()
         for benefit in detail["benefits"]:
@@ -1305,11 +1335,15 @@ def _format_races_list(races: list[Race], fmt: _Fmt) -> None:
     rows = [
         [
             f"[{r.name}]({r.url})" if (fmt == "markdown" and r.url) else r.name,
-            r.size, r.speed, r.source,
+            r.size,
+            r.speed,
+            r.source,
         ]
         for r in races
     ]
-    print(_md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows))
+    print(
+        _md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows)
+    )
 
 
 def format_races_markdown(races: list[Race]) -> None:
@@ -1346,9 +1380,7 @@ def _format_race_detail(race: Race, detail: Mapping[str, Any], fmt: _Fmt) -> Non
         print()
     if detail.get("description"):
         print()
-        _print_description(
-            detail["description"], detail.get("description_md"), fmt
-        )
+        _print_description(detail["description"], detail.get("description_md"), fmt)
     if detail.get("traits"):
         if fmt == "markdown":
             print("\n### Racial Traits\n")
@@ -1413,13 +1445,16 @@ def _format_items_list(items: list[Item], fmt: _Fmt) -> None:
     rows = [
         [
             f"[{i.name}]({i.url})" if (fmt == "markdown" and i.url) else i.name,
-            i.item_type, i.rarity,
+            i.item_type,
+            i.rarity,
             "Yes" if i.requires_attunement else "No",
             i.source,
         ]
         for i in items
     ]
-    print(_md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows))
+    print(
+        _md_table(headers, rows) if fmt == "markdown" else _plain_table(headers, rows)
+    )
 
 
 def format_items_markdown(items: list[Item]) -> None:
@@ -1540,9 +1575,15 @@ def _format_class_output(
             print(_plain_h2(f"{class_name} Subclasses"))
             print()
         print(
-            _md_table(["Name", "Source"], [[s["name"], s.get("source", "")] for s in subclasses])
+            _md_table(
+                ["Name", "Source"],
+                [[s["name"], s.get("source", "")] for s in subclasses],
+            )
             if fmt == "markdown"
-            else _plain_table(["Name", "Source"], [[s["name"], s.get("source", "")] for s in subclasses])
+            else _plain_table(
+                ["Name", "Source"],
+                [[s["name"], s.get("source", "")] for s in subclasses],
+            )
         )
         print()
 
@@ -1557,10 +1598,14 @@ def format_class_markdown(
     show_subclasses: bool = True,
 ) -> None:
     _format_class_output(
-        data, "markdown",
-        min_level=min_level, max_level=max_level,
-        show_table=show_table, show_features=show_features,
-        feature_filter=feature_filter, show_subclasses=show_subclasses,
+        data,
+        "markdown",
+        min_level=min_level,
+        max_level=max_level,
+        show_table=show_table,
+        show_features=show_features,
+        feature_filter=feature_filter,
+        show_subclasses=show_subclasses,
     )
 
 
@@ -1574,10 +1619,14 @@ def format_class_text(
     show_subclasses: bool = True,
 ) -> None:
     _format_class_output(
-        data, "text",
-        min_level=min_level, max_level=max_level,
-        show_table=show_table, show_features=show_features,
-        feature_filter=feature_filter, show_subclasses=show_subclasses,
+        data,
+        "text",
+        min_level=min_level,
+        max_level=max_level,
+        show_table=show_table,
+        show_features=show_features,
+        feature_filter=feature_filter,
+        show_subclasses=show_subclasses,
     )
 
 

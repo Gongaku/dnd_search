@@ -65,7 +65,9 @@ def set(key: str, content: str) -> None:
     path = _cache_path(key)
     tmp = path.with_suffix(".tmp")
     try:
-        compressed = base64.b64encode(gzip.compress(content.encode("utf-8"))).decode("ascii")
+        compressed = base64.b64encode(gzip.compress(content.encode("utf-8"))).decode(
+            "ascii"
+        )
         tmp.write_text(
             json.dumps(
                 {
