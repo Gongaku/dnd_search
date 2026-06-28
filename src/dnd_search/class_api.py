@@ -9,6 +9,7 @@ import dnd_search.api as api
 from dnd_search.dnd_data import Feature, Subclass, DnDClass
 from dnd_search.format_output import format_error
 
+
 def table_to_list(input_str: NavigableString) -> list:
     """
     Converts a NavigableString string into a list of strings containing the text of each table cell
@@ -28,9 +29,7 @@ def table_to_list(input_str: NavigableString) -> list:
     ]
     row_length = max([len(row) for row in table])
 
-    return [
-        row for row in table if len(row) == row_length
-    ]
+    return [row for row in table if len(row) == row_length]
 
 
 def separate_section(sections: list) -> list[list]:
@@ -48,15 +47,16 @@ def separate_section(sections: list) -> list[list]:
     previous_index = 0
 
     for index, section in enumerate(sections):
-        if "h" in section.name \
-                and len(sections[previous_index:index]) > 0:
+        if "h" in section.name and len(sections[previous_index:index]) > 0:
             features.append(sections[previous_index:index])
             previous_index = index
 
     return features
 
 
-def group_features_by_header(feature_list: list, skip_first: bool = False) -> list[Feature]:
+def group_features_by_header(
+    feature_list: list, skip_first: bool = False
+) -> list[Feature]:
     """
     Groups the different tags from the feature list by the header element.
     If will split the list at any point it encounters a header.
@@ -86,7 +86,7 @@ def group_features_by_header(feature_list: list, skip_first: bool = False) -> li
                 feature_desc = f"{feature_desc}{tag.text}\n\n"
 
             elif "ul" in tag.name:
-                for t in [t for t in tag if t != '\n']:
+                for t in [t for t in tag if t != "\n"]:
                     feature_desc = f"{feature_desc.strip()}\n\t• {t.text.strip()}"
                 feature_desc = f"{feature_desc}\n\n"
 
@@ -123,32 +123,34 @@ def get_class(class_name: str) -> DnDClass:
     soup = BeautifulSoup(content, "html.parser")
     name = soup.find(class_="page-title").text
     sections = [
-        section for section
-        in soup.find(id="page-content")
-        if section is not None
-        and section != '\n'
-        and section.name != 'br'
+        section
+        for section in soup.find(id="page-content")
+        if section is not None and section != "\n" and section.name != "br"
     ]
 
     for index in range(0, len(sections[:3])):
-        if 'multiclass' in sections[index].text:
+        if "multiclass" in sections[index].text:
             break
 
-    description = ' '.join([tag.text for tag in sections[:index]])
+    description = " ".join([tag.text for tag in sections[:index]])
     multiclass = sections[index].text
-    leveling_table = sections[index+1]
-    features = sections[index+2:]
+    leveling_table = sections[index + 1]
+    features = sections[index + 2 :]
     leveling_headers, *leveling_table = table_to_list(leveling_table)
-    class_components = DnDClass(name, description, multiclass, leveling_headers, leveling_table, None)
+    class_components = DnDClass(
+        name, description, multiclass, leveling_headers, leveling_table, None
+    )
 
     features = list(
-        next(
-            feature for feature in features if feature != '\n'
-        ).find_all(["h1", "h3", "h5", "p", "ul", "table"])
+        next(feature for feature in features if feature != "\n").find_all(
+            ["h1", "h3", "h5", "p", "ul", "table"]
+        )
     )
 
     class_features = separate_section(features)
-    class_components.features = group_features_by_header(class_features, skip_first=True)
+    class_components.features = group_features_by_header(
+        class_features, skip_first=True
+    )
     logging.debug(f"Created object for class {class_name}")
 
     return class_components
@@ -178,12 +180,12 @@ def get_subclass(class_name: str, subclass: str) -> DnDClass:
     name = re.sub(f"^{class_name.title()}.*:", "", name).strip()
 
     *description, features = [
-        section for section
-        in soup.find(id="page-content")
-        if section is not None and section != '\n'
+        section
+        for section in soup.find(id="page-content")
+        if section is not None and section != "\n"
     ]
     if isinstance(description, list):
-        description = ' '.join([tag.text for tag in description])
+        description = " ".join([tag.text for tag in description])
     else:
         description = description.text
     subclass_features = separate_section(features.find_all(["p", "h3"]))

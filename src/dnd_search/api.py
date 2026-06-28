@@ -2,6 +2,7 @@ import requests
 
 WIKIDOT_URI = "https://dnd5e.wikidot.com"
 
+
 def api_call(uri: str) -> dict:
     """
     Returns html content for URI request

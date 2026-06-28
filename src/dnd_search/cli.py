@@ -23,8 +23,9 @@ DND_CLASSES = [
     "rogue",
     "sorcerer",
     "warlock",
-    "wizard"
+    "wizard",
 ]
+
 
 def spell_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
     """Adds subcommands for the SPELL subcommands"""
@@ -33,10 +34,11 @@ def spell_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
         "spell",
         help="fetch spell information",
         description="Fetches spell information for either individual\
-                spells or whole spell lists")
+                spells or whole spell lists",
+    )
     spell_subparsers = spell_parser.add_subparsers(
-        help="command help",
-        dest="subcommand")
+        help="command help", dest="subcommand"
+    )
 
     # Parser for individual spells
     get_spell_parser = spell_subparsers.add_parser(
@@ -44,16 +46,18 @@ def spell_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
         help="fetch individual spell information",
         description="Fetch the information of an individual spell. \
                 Includes the name, source, level, school of magic, \
-                effect, and the class spell list")
+                effect, and the class spell list",
+    )
     get_spell_parser.add_argument(
-        "spell_name",
-        nargs='*',
-        help="spell Name to search information for.")
+        "spell_name", nargs="*", help="spell Name to search information for."
+    )
     get_spell_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         choices=["txt", "md", "csv", "tsv", "json"],
-        help="Changes the format that the data is outputted. Default: txt")
+        help="Changes the format that the data is outputted. Default: txt",
+    )
 
     # Parser for spell list
     list_parser = spell_subparsers.add_parser(
@@ -62,37 +66,44 @@ def spell_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
         description="Pull a list of spells depending \
                 on the specified arguments. By default \
                 It pulls a list of all avaliable Wizard's\
-                of the Coast spells.")
+                of the Coast spells.",
+    )
     list_parser.add_argument(
-        "-cl", "--class_name",
+        "-cl",
+        "--class_name",
         metavar="CLASS",
         type=str.lower,
         choices=DND_CLASSES,
-        help="limits search to a specified player class")
+        help="limits search to a specified player class",
+    )
     list_parser.add_argument(
-        "-l", "--level",
-        type=str,
-        help="limits search to specified spell level")
+        "-l", "--level", type=str, help="limits search to specified spell level"
+    )
     list_parser.add_argument(
-        "-s", "--school",
-        type=str,
-        help="limits search to specified school of magic")
+        "-s", "--school", type=str, help="limits search to specified school of magic"
+    )
     list_parser.add_argument(
-        "-co", "--component",
-        nargs='+',
+        "-co",
+        "--component",
+        nargs="+",
         help="limits search to specified components. \
             Ex: if using V, then any combination of components\
-            including V will be returned")
+            including V will be returned",
+    )
     list_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         choices=["txt", "csv", "tsv", "json"],
         help="Changes the format that the data is outputted. \
-                The txt option outputs the data as a table. Default: txt")
+                The txt option outputs the data as a table. Default: txt",
+    )
     list_parser.add_argument(
-        "-sh", "--short",
-        action='store_true',
-        help="Removes the column used to limit search in the result set")
+        "-sh",
+        "--short",
+        action="store_true",
+        help="Removes the column used to limit search in the result set",
+    )
 
     return (spell_parser, get_spell_parser, list_parser)
 
@@ -103,66 +114,82 @@ def class_subcommand(subparsers: argparse.ArgumentParser) -> tuple:
         "class",
         help="fetch class information",
         description="Fetches class information including\
-                class descriptions, book source, and features")
+                class descriptions, book source, and features",
+    )
 
     class_subparsers = class_parser.add_subparsers(
-        help="command help",
-        dest="subcommand")
+        help="command help", dest="subcommand"
+    )
 
     class_base_parser = class_subparsers.add_parser(
         "get",
         help="fetchs base class information. Ex: Wizard",
-        description="Fetch information regarding the base class")
+        description="Fetch information regarding the base class",
+    )
     class_base_parser.add_argument(
         "class_name",
         metavar="CLASS",
         type=str.lower,
         choices=DND_CLASSES,
         help=f"Name of the Dnd 5e class to pull data about.\
-                \nOptions: {', '.join(DND_CLASSES)}")
+                \nOptions: {', '.join(DND_CLASSES)}",
+    )
     class_base_parser.add_argument(
-        "-f", "--feature",
+        "-f",
+        "--feature",
         nargs="+",
         help="Search for a class feature containing \
-            the inputted value in the name")
+            the inputted value in the name",
+    )
     class_base_parser.add_argument(
-        "-l", "--leveling",
-        action='store_true',
+        "-l",
+        "--leveling",
+        action="store_true",
         help="Search for a subclass feature containing \
-            the inputted value in the name")
+            the inputted value in the name",
+    )
     class_base_parser.add_argument(
         "--list-subclasses",
-        action='store_true',
-        help="List all subclasses for the given class")
+        action="store_true",
+        help="List all subclasses for the given class",
+    )
     class_base_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         choices=["txt", "md", "csv", "tsv", "json"],
-        help="Changes the format that the data is outputted. Default: txt")
+        help="Changes the format that the data is outputted. Default: txt",
+    )
 
     class_sub_parser = class_subparsers.add_parser(
         "subclass",
         help="fetchs subclass/archetype information. Ex: School of Conjuration Wizard",
-        description="Fetch information regarding a specific subclass.")
+        description="Fetch information regarding a specific subclass.",
+    )
     class_sub_parser.add_argument(
-        "class_name",
-        help="Parent class for subclass to look for")
+        "class_name", help="Parent class for subclass to look for"
+    )
     class_sub_parser.add_argument(
         "subclass",
         nargs="*",
         help="Subclass to search for. If no subclass is given, \
-            then a list of available subclasses will be returned")
+            then a list of available subclasses will be returned",
+    )
     class_sub_parser.add_argument(
-        "-f", "--feature",
+        "-f",
+        "--feature",
         nargs="+",
         help="Search for a subclass feature containing \
-            the inputted value in the name")
+            the inputted value in the name",
+    )
     class_sub_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         choices=["txt", "md", "csv", "tsv", "json"],
         help="Changes the format that the data is outputted. \
-                The txt option outputs the data as a table. Default: txt")
+                The txt option outputs the data as a table. Default: txt",
+    )
 
     return (class_parser, class_base_parser, class_sub_parser)
 
@@ -172,6 +199,7 @@ def usage_and_error(data, parser) -> None:
         parser.print_usage()
         sys.exit(1)
 
+
 def list_subclasses(class_data: DnDClass | Subclass, args: argparse.Namespace) -> str:
     (features,) = [
         format_output.format_feature(feature, args.output, only_table=True)
@@ -179,9 +207,18 @@ def list_subclasses(class_data: DnDClass | Subclass, args: argparse.Namespace) -
         if feature.table is not None
         and any(
             x in feature.title.lower()
-            for x in ['artificer', 'path', 'college',
-                      'domain', 'circle', 'tradition',
-                      'oath', 'archetype', 'sorcerous', 'patron']
+            for x in [
+                "artificer",
+                "path",
+                "college",
+                "domain",
+                "circle",
+                "tradition",
+                "oath",
+                "archetype",
+                "sorcerous",
+                "patron",
+            ]
         )
     ]
     return features
@@ -191,15 +228,16 @@ def class_output(
     class_data: DnDClass | Subclass,
     parser,
     output_format: str,
-    feature_flag: bool = False
+    feature_flag: bool = False,
 ) -> None:
     usage_and_error(class_data, parser)
 
     output = None
     if feature_flag:
-        search_string = ' '.join(feature_flag)
+        search_string = " ".join(feature_flag)
         features = [
-            format_output.format_feature(feature, output_format) for feature in class_data.features
+            format_output.format_feature(feature, output_format)
+            for feature in class_data.features
             if search_string.lower() in feature.title.lower()
         ]
 
@@ -207,10 +245,10 @@ def class_output(
             features = json.loads('{"features": ' + f"[{','.join(features)}]" + "}")
             features = json.dumps(features, indent=4)
         else:
-            features = ''.join(features)
+            features = "".join(features)
         output = features
 
-    elif hasattr(class_data, 'multiclass_requirement'):
+    elif hasattr(class_data, "multiclass_requirement"):
         output = format_output.format_class(class_data, output_format)
 
     else:
@@ -227,17 +265,18 @@ def cli() -> None:
 
     logging.basicConfig(
         level=logging.ERROR,
-        format='%(asctime)s | %(levelname)s | %(message)s',
+        format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S%z",
-        handlers=[stream_handler, file_handler]
+        handlers=[stream_handler, file_handler],
     )
 
     parser = argparse.ArgumentParser(
-        prog='dnd_search',
+        prog="dnd_search",
         description="This is meant to be a quick way to \
                 search up either a spell or spell list \
                 for a given DnD 5e class. It uses \
-                https://dnd5e.wikidot.com to scrape information")
+                https://dnd5e.wikidot.com to scrape information",
+    )
     subparsers = parser.add_subparsers(help="command help", dest="subparser_name")
 
     # For SPELL subcommands
@@ -249,7 +288,7 @@ def cli() -> None:
     args = parser.parse_args()
 
     if len(sys.argv) <= 2:
-        parser.parse_args(['--help'])
+        parser.parse_args(["--help"])
 
     elif args.subparser_name == "spell":
         output = None
@@ -281,19 +320,22 @@ def cli() -> None:
                 output = format_output.format_table(
                     class_data.leveling_table,
                     headers=class_data.leveling_headers,
-                    output_format=args.output)
+                    output_format=args.output,
+                )
             elif args.list_subclasses:
                 output = list_subclasses(class_data, args)
 
             else:
-                output = class_output(class_data, class_base_parser, args.output, args.feature)
+                output = class_output(
+                    class_data, class_base_parser, args.output, args.feature
+                )
 
         elif args.subcommand == "subclass":
             class_name = args.class_name
-            subclass = ' '.join(args.subclass)
+            subclass = " ".join(args.subclass)
             logging.debug(f"Fetching subclass data for {class_name}")
 
-            if subclass == ' ':
+            if subclass == " ":
                 class_sub_parser.print_usage()
 
             if len(subclass) == 0:
@@ -301,10 +343,12 @@ def cli() -> None:
                 output = list_subclasses(class_data, args)
             else:
                 class_data = class_api.get_subclass(class_name, subclass)
-                output = class_output(class_data, class_sub_parser, args.output, args.feature)
+                output = class_output(
+                    class_data, class_sub_parser, args.output, args.feature
+                )
 
     else:
-        parser.parse_args(['--help'])
+        parser.parse_args(["--help"])
 
     print(output)
 

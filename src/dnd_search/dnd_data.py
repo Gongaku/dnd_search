@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass, asdict
 
+
 @dataclass
-class Feature():
+class Feature:
     """Class Feature for either a DndClass or Subclass"""
+
     title: str
     description: str
     table: list[list]
 
     def dict(self):
-        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ''}
+        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ""}
+
 
 @dataclass
-class Subclass():
+class Subclass:
     """Subclass/Archetype data for a DnDClass"""
+
     class_name: str
     title: str
     description: str
@@ -21,11 +25,13 @@ class Subclass():
     features: list[Feature]
 
     def dict(self):
-        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ''}
+        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ""}
+
 
 @dataclass
-class DnDClass():
+class DnDClass:
     """Class data for a DnD 5e Player Class"""
+
     class_name: str
     description: str
     multiclass_requirement: str
@@ -34,11 +40,13 @@ class DnDClass():
     features: list[Feature]
 
     def dict(self):
-        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ''}
+        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ""}
+
 
 @dataclass
-class Spell():
+class Spell:
     """DnD 5e Spell data"""
+
     name: str
     source: str
     level: str
@@ -52,4 +60,4 @@ class Spell():
     classes: list[str]
 
     def dict(self):
-        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ''}
+        return {k: str(v) for k, v in asdict(self).items() if v is not None and v != ""}

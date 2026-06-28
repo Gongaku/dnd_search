@@ -9,7 +9,8 @@ from shutil import get_terminal_size
 
 from dnd_search.dnd_data import Spell, Feature, DnDClass, Subclass
 
-class colors():
+
+class colors:
     """
     Class containing a few ANSI escape codes for terminal colored output
 
@@ -22,6 +23,7 @@ class colors():
     - GREEN
     - BLUE
     """
+
     _start = "\033["
     CLEAR = f"{_start}0m"
     BOLD = f"{_start}01m"
@@ -45,7 +47,9 @@ def format_json(json_obj: dict) -> str:
     return json.dumps(json_obj, indent=4)
 
 
-def format_table(table: list[list], headers: list[str], output_format: str = 'txt') -> str:
+def format_table(
+    table: list[list], headers: list[str], output_format: str = "txt"
+) -> str:
     """
     Prints the data in a tabular format. Wrapper around tabulate function
 
@@ -58,9 +62,9 @@ def format_table(table: list[list], headers: list[str], output_format: str = 'tx
     """
     formatted_table = None
 
-    if 'sv' in output_format:
+    if "sv" in output_format:
         table = [headers] + table
-        chars = (',', '\t')
+        chars = (",", "\t")
 
         if output_format == "csv":
             joining_char, replace_char = chars
@@ -68,16 +72,23 @@ def format_table(table: list[list], headers: list[str], output_format: str = 'tx
             replace_char, joining_char = chars
 
         replace_pattern = f"[{joining_char}\n]"
-        print([[re.sub(replace_pattern, replace_char, col) for col in row] for row in table])
+        print(
+            [
+                [re.sub(replace_pattern, replace_char, col) for col in row]
+                for row in table
+            ]
+        )
 
-        formatted_table = '\n'.join([
-            joining_char.join([
-                re.sub(joining_char, replace_pattern, str(col))
-                for col in row
-            ]) for row in table
-        ])
+        formatted_table = "\n".join(
+            [
+                joining_char.join(
+                    [re.sub(joining_char, replace_pattern, str(col)) for col in row]
+                )
+                for row in table
+            ]
+        )
     else:
-        formatted_table = tabulate.tabulate(table, headers=headers, tablefmt='simple')
+        formatted_table = tabulate.tabulate(table, headers=headers, tablefmt="simple")
 
     return formatted_table
 
@@ -104,39 +115,46 @@ def format_spell(spell: Spell, output_format: str = "txt") -> None:
         return None
 
     if output_format == "csv" or output_format == "tsv":
-        chars = (',', '\t')
+        chars = (",", "\t")
 
         if output_format == "csv":
             joining_char, replace_char = chars
-            replace_char = ','
+            replace_char = ","
         else:
             replace_char, joining_char = chars
 
         replace_pattern = f"[{joining_char}\n]"
-        formatted_spell = joining_char.join([
-            f'"{col}"' for col in (
-                spell.name,
-                spell.source,
-                spell.level,
-                spell.school,
-                spell.casting_time,
-                spell.spell_range,
-                spell.duration,
-                re.sub(replace_pattern, "", spell.components),
-                re.sub(replace_pattern, "", spell.effect),
-                re.sub(replace_pattern, "", spell.higher_level_effect),
-                replace_char.join(spell.classes)
-            )
-        ])
+        formatted_spell = joining_char.join(
+            [
+                f'"{col}"'
+                for col in (
+                    spell.name,
+                    spell.source,
+                    spell.level,
+                    spell.school,
+                    spell.casting_time,
+                    spell.spell_range,
+                    spell.duration,
+                    re.sub(replace_pattern, "", spell.components),
+                    re.sub(replace_pattern, "", spell.effect),
+                    re.sub(replace_pattern, "", spell.higher_level_effect),
+                    replace_char.join(spell.classes),
+                )
+            ]
+        )
 
     elif output_format == "json":
         formatted_spell = format_json(spell.dict())
 
     elif output_format == "md":
-        hle = f"\nAt Higher Levels. {spell.higher_level_effect}\n" \
-            if spell.higher_level_effect else ''
-        formatted_spell = textwrap.dedent(
-            f"""\
+        hle = (
+            f"\nAt Higher Levels. {spell.higher_level_effect}\n"
+            if spell.higher_level_effect
+            else ""
+        )
+        formatted_spell = (
+            textwrap.dedent(
+                f"""\
             {spell.name}
             -
             Source:       {spell.source}\\
@@ -146,21 +164,31 @@ def format_spell(spell: Spell, output_format: str = "txt") -> None:
             Range:        {spell.spell_range}\\
             Components:   {spell.components}\\
             Duration:     {spell.duration}\\
-            Effect:""") + f"\n{'\n'.join([sentence.strip() for sentence in spell.effect.split('.')])}" + hle + textwrap.dedent(
-            f"""\
-            Spell Lists: {', '.join(spell.classes)}
-            """)
+            Effect:"""
+            )
+            + f"\n{'\n'.join([sentence.strip() for sentence in spell.effect.split('.')])}"
+            + hle
+            + textwrap.dedent(
+                f"""\
+            Spell Lists: {", ".join(spell.classes)}
+            """
+            )
+        )
 
     else:
         TERM_WIDTH, _ = get_terminal_size()
         padding = int((TERM_WIDTH - len(spell.name)) / 2)
-        hle = f"{colors.BOLD}At Higher Levels.{colors.CLEAR} {spell.higher_level_effect}\n" \
-            if spell.higher_level_effect else ''
-        formatted_spell = textwrap.dedent(
-            f"""\
-            {'─' * TERM_WIDTH}
-            {' ' * padding}{colors.BOLD}{spell.name}{colors.CLEAR}
-            {'─' * TERM_WIDTH}
+        hle = (
+            f"{colors.BOLD}At Higher Levels.{colors.CLEAR} {spell.higher_level_effect}\n"
+            if spell.higher_level_effect
+            else ""
+        )
+        formatted_spell = (
+            textwrap.dedent(
+                f"""\
+            {"─" * TERM_WIDTH}
+            {" " * padding}{colors.BOLD}{spell.name}{colors.CLEAR}
+            {"─" * TERM_WIDTH}
             {colors.BOLD}Source:{colors.CLEAR}       {spell.source}
             {colors.BOLD}Level:{colors.CLEAR}        {spell.level.capitalize()}
             {colors.BOLD}School:{colors.CLEAR}       {spell.school.capitalize()}
@@ -168,10 +196,16 @@ def format_spell(spell: Spell, output_format: str = "txt") -> None:
             {colors.BOLD}Range:{colors.CLEAR}        {spell.spell_range}
             {colors.BOLD}Components:{colors.CLEAR}   {spell.components}
             {colors.BOLD}Duration:{colors.CLEAR}     {spell.duration}
-            """) + f"\n{spell.effect.replace('*', '\u2022')}" + hle + textwrap.dedent(
-            f"""\
-            {colors.BOLD}Spell Lists:{colors.CLEAR} {', '.join(spell.classes)}
-            """)
+            """
+            )
+            + f"\n{spell.effect.replace('*', '\u2022')}"
+            + hle
+            + textwrap.dedent(
+                f"""\
+            {colors.BOLD}Spell Lists:{colors.CLEAR} {", ".join(spell.classes)}
+            """
+            )
+        )
 
     return formatted_spell
 
@@ -181,7 +215,7 @@ def limit_search(
     data: list,
     condition: str | int | list,
     column_index: int,
-    shorten: bool = False
+    shorten: bool = False,
 ) -> list[list]:
     """
     This limits the result set to only the specified condition.
@@ -199,14 +233,15 @@ def limit_search(
     if shorten:
         header.pop(column_index)
         data = [
-            d[:column_index]+d[column_index+1:] for d
-            in data
+            d[:column_index] + d[column_index + 1 :]
+            for d in data
             if str(d[column_index]).lower() == str(condition).lower()
             or str(condition).lower() in str(d[column_index]).lower()
         ]
     else:
         data = [
-            d for d in data
+            d
+            for d in data
             if str(d[column_index]).lower() == str(condition).lower()
             or str(condition).lower() in str(d[column_index]).lower()
             or all(str(c).lower() in str(d[column_index]).lower() for c in condition)
@@ -226,37 +261,70 @@ def format_spell_list(spell_list: list[Spell], cli_arguments: Namespace = None) 
     Returns:
         String containing the spell list in the desired output format
     """
-    headers = ["Name", "Level", "School", "Casting Time", "Range", "Duration", "Components"]
+    headers = [
+        "Name",
+        "Level",
+        "School",
+        "Casting Time",
+        "Range",
+        "Duration",
+        "Components",
+    ]
 
     if cli_arguments is None:
         return spell_list
 
     # Limit search result set
     if cli_arguments.level:
-        spell_list = limit_search(headers, spell_list, cli_arguments.level, headers.index("Level"), cli_arguments.short)
+        spell_list = limit_search(
+            headers,
+            spell_list,
+            cli_arguments.level,
+            headers.index("Level"),
+            cli_arguments.short,
+        )
 
     if cli_arguments.school:
-        spell_list = limit_search(headers, spell_list, cli_arguments.school, headers.index("School"), cli_arguments.short)
+        spell_list = limit_search(
+            headers,
+            spell_list,
+            cli_arguments.school,
+            headers.index("School"),
+            cli_arguments.short,
+        )
 
     if cli_arguments.component:
-        spell_list = limit_search(headers, spell_list, cli_arguments.component, headers.index("Components"), cli_arguments.short)
+        spell_list = limit_search(
+            headers,
+            spell_list,
+            cli_arguments.component,
+            headers.index("Components"),
+            cli_arguments.short,
+        )
 
     # Output format
     if "sv" in cli_arguments.output:
-        joining_char = ',' if cli_arguments.output == "csv" else '\t'
+        joining_char = "," if cli_arguments.output == "csv" else "\t"
 
-        formatted_list = '\n'.join([
-            joining_char.join([
-                str(val).replace(joining_char, '')
-                for val in spell.dict().values()
-            ]) for spell in spell_list
-        ])
+        formatted_list = "\n".join(
+            [
+                joining_char.join(
+                    [
+                        str(val).replace(joining_char, "")
+                        for val in spell.dict().values()
+                    ]
+                )
+                for spell in spell_list
+            ]
+        )
 
     elif cli_arguments.output == "json":
-        formatted_list = format_json({
-            "Spell Count": len(spell_list),
-            "Spells": [dict(zip(headers, spell)) for spell in spell_list]
-        })
+        formatted_list = format_json(
+            {
+                "Spell Count": len(spell_list),
+                "Spells": [dict(zip(headers, spell)) for spell in spell_list],
+            }
+        )
 
     else:
         formatted_list = format_table(spell_list, headers=headers)
@@ -279,9 +347,7 @@ def colorize(text, pattern) -> str:
 
 
 def format_feature(
-    feature: Feature,
-    output_format: str = "str",
-    only_table: bool = False
+    feature: Feature, output_format: str = "str", only_table: bool = False
 ) -> str:
     """
     Formats a player class feature into the desire output format
@@ -295,12 +361,18 @@ def format_feature(
     """
     table = None
     if feature.table:
-        table_headers, *table = [row for row in feature.table if len(row) == len(feature.table[0])]
+        table_headers, *table = [
+            row for row in feature.table if len(row) == len(feature.table[0])
+        ]
 
     if output_format == "csv" or output_format == "tsv":
         separator = "," if output_format == "csv" else "\t"
         replacement_char = "|" if output_format == "csv" else ""
-        description = feature.description.replace(separator, replacement_char).replace("\n", "").strip()
+        description = (
+            feature.description.replace(separator, replacement_char)
+            .replace("\n", "")
+            .strip()
+        )
         formatted_feature = f"{feature.title}{separator}{description}"
 
     elif output_format == "json":
@@ -316,14 +388,21 @@ def format_feature(
     else:
         highlights = [
             "(Hit|Armor|Weapons|Tools|Saving|Skills)(.*):",
-            "Spell save DC", "Spell attack modifier",
-            "Copying a Spell into the Book.", "Replacing the Book.", "The Book's Appearance."
+            "Spell save DC",
+            "Spell attack modifier",
+            "Copying a Spell into the Book.",
+            "Replacing the Book.",
+            "The Book's Appearance.",
         ]
         description = feature.description
-        title = f"{colors.BOLD}{feature.title}{colors.CLEAR}\n{'─'*40}" if feature.title else ""
+        title = (
+            f"{colors.BOLD}{feature.title}{colors.CLEAR}\n{'─' * 40}"
+            if feature.title
+            else ""
+        )
 
         if title is None:
-            title = re.match('.*:', description).group()
+            title = re.match(".*:", description).group()
 
         for h in highlights:
             description = colorize(description, h)
@@ -331,7 +410,7 @@ def format_feature(
         formatted_table = format_table(table, headers=table_headers) if table else ""
         formatted_feature = f"{title}\n{description}"
         if table:
-            formatted_feature = f"{formatted_feature.strip()}\n{formatted_table}\n\n" \
+            formatted_feature = f"{formatted_feature.strip()}\n{formatted_table}\n\n"
 
         if only_table:
             formatted_feature = formatted_table
@@ -355,16 +434,22 @@ def format_subclass(data: Subclass, output_format: str = "str") -> str:
     output = None
 
     if output_format == "csv" or output_format == "tsv":
-        output = '\n'.join([format_feature(feature, output_format) for feature in data.features])
+        output = "\n".join(
+            [format_feature(feature, output_format) for feature in data.features]
+        )
 
     elif output_format == "json":
-        output = format_json({
-            "class_name": data.class_name,
-            "subclass_name": data.title,
-            "subclass_description": data.description,
-            "subclass_source": data.source,
-            "features": [format_feature(feature, "json") for feature in data.features]
-        })
+        output = format_json(
+            {
+                "class_name": data.class_name,
+                "subclass_name": data.title,
+                "subclass_description": data.description,
+                "subclass_source": data.source,
+                "features": [
+                    format_feature(feature, "json") for feature in data.features
+                ],
+            }
+        )
 
     else:
         TERM_WIDTH, _ = get_terminal_size()
@@ -372,16 +457,17 @@ def format_subclass(data: Subclass, output_format: str = "str") -> str:
         double_space = "\n\n"
         output = textwrap.dedent(
             f"""\
-            {'─' * TERM_WIDTH}
-            {' ' * padding}{colors.BOLD}{data.class_name}:{data.title}{colors.CLEAR}
-            {'─' * TERM_WIDTH}
+            {"─" * TERM_WIDTH}
+            {" " * padding}{colors.BOLD}{data.class_name}:{data.title}{colors.CLEAR}
+            {"─" * TERM_WIDTH}
             {colors.BOLD}Description
-            {'─'*40}{colors.CLEAR}
+            {"─" * 40}{colors.CLEAR}
             {data.description}\n\n
             {colors.BOLD}Source
-            {'─'*40}{colors.CLEAR}
+            {"─" * 40}{colors.CLEAR}
             {data.source}\n\n
-            """) + "\n".join([format_feature(feature) for feature in data.features])
+            """
+        ) + "\n".join([format_feature(feature) for feature in data.features])
 
     return output
 
@@ -399,38 +485,48 @@ def format_class(data: DnDClass, output_format: str = "str") -> str:
     """
     output = None
     if output_format == "csv" or output_format == "tsv":
-        output = '\n'.join([format_feature(feature, output_format) for feature in data.features])
+        output = "\n".join(
+            [format_feature(feature, output_format) for feature in data.features]
+        )
 
     elif output_format == "json":
-        output = format_json({
-            "name": data.class_name,
-            "description": data.description,
-            "multiclass_requirement": data.multiclass_requirement,
-            "leveling_table": [dict(zip(data.leveling_headers, row)) for row in data.leveling_table],
-            "features": [format_feature(feature, "json") for feature in data.features]
-        })
+        output = format_json(
+            {
+                "name": data.class_name,
+                "description": data.description,
+                "multiclass_requirement": data.multiclass_requirement,
+                "leveling_table": [
+                    dict(zip(data.leveling_headers, row)) for row in data.leveling_table
+                ],
+                "features": [
+                    format_feature(feature, "json") for feature in data.features
+                ],
+            }
+        )
 
     else:
         TERM_WIDTH, _ = get_terminal_size()
         padding = int((TERM_WIDTH - len(data.class_name)) / 2)
-        output = textwrap.dedent(f"""\
-            {'─' * TERM_WIDTH}
-            {' ' * padding}{colors.BOLD}{data.class_name}{colors.CLEAR}
-            {'─' * TERM_WIDTH}
+        output = (
+            textwrap.dedent(f"""\
+            {"─" * TERM_WIDTH}
+            {" " * padding}{colors.BOLD}{data.class_name}{colors.CLEAR}
+            {"─" * TERM_WIDTH}
             {colors.BOLD}Description
-            {'─'*40}{colors.CLEAR}
+            {"─" * 40}{colors.CLEAR}
             {data.description}
 
 
             {colors.BOLD}Multiclass Requirement
-            {'─'*40}{colors.CLEAR}
+            {"─" * 40}{colors.CLEAR}
             {data.multiclass_requirement}
 
             {colors.BOLD}Leveling Table
-            {'─'*40}{colors.CLEAR}
-            """) \
-            + format_table(data.leveling_table, headers=data.leveling_headers) \
-            + "\n\n" \
+            {"─" * 40}{colors.CLEAR}
+            """)
+            + format_table(data.leveling_table, headers=data.leveling_headers)
+            + "\n\n"
             + "\n".join([format_feature(feature) for feature in data.features])
+        )
 
     return output

@@ -8,6 +8,7 @@ import dnd_search.api as api
 from dnd_search.dnd_data import Spell
 from dnd_search.format_output import format_error
 
+
 def get_spell(spell_name: str) -> Spell:
     """
     Scrapes the wikidot link for the specified spell. It
@@ -19,7 +20,7 @@ def get_spell(spell_name: str) -> Spell:
     Returns:
         Spell object containing all specified information
     """
-    uri = f"{api.WIKIDOT_URI}/spell:{spell_name.replace(" ", "-").replace("/", "-").lower()}"
+    uri = f"{api.WIKIDOT_URI}/spell:{spell_name.replace(' ', '-').replace('/', '-').lower()}"
     try:
         content = api.api_call(uri)
 
@@ -30,8 +31,16 @@ def get_spell(spell_name: str) -> Spell:
 
     soup = BeautifulSoup(content, "html.parser")
     name = soup.find(class_="page-title").text
-    source, level, school, casting_time, \
-        spell_range, components, effect, higher_level_effect = [''] * 8
+    (
+        source,
+        level,
+        school,
+        casting_time,
+        spell_range,
+        components,
+        effect,
+        higher_level_effect,
+    ) = [""] * 8
     classes = []
 
     for d in soup.find(id="page-content").find_all(["p", "ul"]):
@@ -42,17 +51,13 @@ def get_spell(spell_name: str) -> Spell:
             source = re.search("(?<=Source: ).*", text).group()
 
         elif re.match("[0-9]", text):
-            level, school = re\
-                .search("(^[0-9].*level) (.*)", text)\
-                .groups()
+            level, school = re.search("(^[0-9].*level) (.*)", text).groups()
 
         elif re.search("cantrip$", text):
-            school, level = re\
-                .search("(.*) (cantrip)$", text)\
-                .groups()
+            school, level = re.search("(.*) (cantrip)$", text).groups()
 
         elif re.match("Spell Lists", text):
-            text = text[text.index(".")+1:]
+            text = text[text.index(".") + 1 :]
             classes = [c.strip() for c in text.split(",")]
 
         elif "Casting Time: " in text:
@@ -62,8 +67,7 @@ def get_spell(spell_name: str) -> Spell:
                 "(?<=Components: ).*|"
                 "(?<=Duration: ).*"
             )
-            casting_time, spell_range, components, duration = \
-                re.findall(pattern, text)
+            casting_time, spell_range, components, duration = re.findall(pattern, text)
 
         elif d.name == "ul":
             effect = f"{effect}\t* {text.strip()}\n"
@@ -87,8 +91,9 @@ def get_spell(spell_name: str) -> Spell:
         components,
         effect,
         higher_level_effect,
-        classes
+        classes,
     )
+
 
 def get_spell_list(class_name: str, trim_output: bool = False) -> list[Spell]:
     """
@@ -126,8 +131,9 @@ def get_spell_list(class_name: str, trim_output: bool = False) -> list[Spell]:
             level += 1
             continue
 
-        name, school, casting_time, spell_range, duration, components = \
+        name, school, casting_time, spell_range, duration, components = (
             spell.text.split("\n")[1:-1]
+        )
 
         if trim_output:
             name = truncate_string(name, 15)
@@ -158,7 +164,7 @@ def get_spell_list(class_name: str, trim_output: bool = False) -> list[Spell]:
             components,
             None,
             None,
-            None
+            None,
         )
 
         spell_list.append(s)
@@ -182,6 +188,6 @@ def truncate_string(input_str: str, max_length: int = 10) -> str:
     str_end = "..."
 
     if len(input_str) > max_length:
-        return input_str[:max_length - len(str_end)]+str_end
+        return input_str[: max_length - len(str_end)] + str_end
 
     return input_str
