@@ -22,7 +22,7 @@
 
         dnd-search = python.pkgs.buildPythonApplication {
           pname = "dnd-search";
-          version = "1.1.1";
+          version = "1.2";
           pyproject = true;
 
           src = ./.;
