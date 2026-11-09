@@ -101,7 +101,7 @@ class TestSpells:
 
     def test_plain_output(self, runner, spells):
         with patch("dnd_search.scraper.fetch_spells", return_value=spells):
-            result = invoke(runner, "spells", "--output", "plain")
+            result = invoke(runner, "spells", "--output", "text")
         assert "Fireball" in result.output
 
 
@@ -212,6 +212,101 @@ class TestClass:
         with patch("dnd_search.scraper.fetch_classes", return_value=classes):
             result = invoke(runner, "class", "zzznomatch", exit_code=1)
         assert result.exit_code == 1
+
+    @staticmethod
+    def _class_data(class_detail):
+        return {
+            "class_name": "Fighter",
+            "table_headers": ["Level", "Proficiency Bonus", "Features"],
+            "table_rows": [
+                ["1st", "+2", "Fighting Style"],
+                ["4th", "+2", "Ability Score Improvement"],
+                ["18th", "+6", "Indomitable (3/Day)"],
+            ],
+            "features": [
+                {"name": "Fighting Style", "level": 1, "body": []},
+                {"name": "Ability Score Improvement", "level": 4, "body": []},
+                {"name": "Indomitable", "level": 18, "body": []},
+            ],
+            "subclasses": class_detail["subclasses"],
+        }
+
+    def test_min_max_level_filters_progression_table(
+        self, runner, classes, class_detail
+    ):
+        with (
+            patch("dnd_search.scraper.fetch_classes", return_value=classes),
+            patch(
+                "dnd_search.scraper.fetch_class_features",
+                return_value=self._class_data(class_detail),
+            ),
+        ):
+            result = invoke(
+                runner,
+                "class",
+                "fighter",
+                "--min-level",
+                "4",
+                "--max-level",
+                "10",
+                "--only-table",
+            )
+        assert "4th" in result.output
+        assert "1st" not in result.output
+        assert "18th" not in result.output
+
+    def test_min_max_level_filters_features(self, runner, classes, class_detail):
+        with (
+            patch("dnd_search.scraper.fetch_classes", return_value=classes),
+            patch(
+                "dnd_search.scraper.fetch_class_features",
+                return_value=self._class_data(class_detail),
+            ),
+        ):
+            result = invoke(
+                runner, "class", "fighter", "--min-level", "4", "--max-level", "10"
+            )
+        assert "Ability Score Improvement" in result.output
+        assert "Fighting Style" not in result.output
+        assert "Indomitable" not in result.output
+
+    def test_no_features_in_level_range_warns(self, runner, classes, class_detail):
+        with (
+            patch("dnd_search.scraper.fetch_classes", return_value=classes),
+            patch(
+                "dnd_search.scraper.fetch_class_features",
+                return_value=self._class_data(class_detail),
+            ),
+        ):
+            result = invoke(
+                runner, "class", "fighter", "--min-level", "5", "--max-level", "10"
+            )
+        assert "No features between level 5 and 10" in result.output
+
+    def test_min_max_level_filters_features_markdown_output(
+        self, runner, classes, class_detail
+    ):
+        with (
+            patch("dnd_search.scraper.fetch_classes", return_value=classes),
+            patch(
+                "dnd_search.scraper.fetch_class_features",
+                return_value=self._class_data(class_detail),
+            ),
+        ):
+            result = invoke(
+                runner,
+                "class",
+                "fighter",
+                "--min-level",
+                "4",
+                "--max-level",
+                "10",
+                "--output",
+                "markdown",
+            )
+        assert "Ability Score Improvement" in result.output
+        assert "Fighting Style" not in result.output
+        assert "Indomitable" not in result.output
 
 
 # ---------------------------------------------------------------------------

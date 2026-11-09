@@ -1008,12 +1008,24 @@ def class_info(
             "[bold]Class Features[/bold] — [dim]use --no-features to hide[/dim]"
         )
         console.print()
-        formatters.format_class_features(data, name_filter=feature, show_body=True)
+        formatters.format_class_features(
+            data,
+            name_filter=feature,
+            show_body=True,
+            min_level=min_level,
+            max_level=max_level,
+        )
     elif not using_only:
         console.print(
             "[bold]Class Features[/bold] [dim](names only — use --features to see descriptions)[/dim]"
         )
-        formatters.format_class_features(data, name_filter=feature, show_body=False)
+        formatters.format_class_features(
+            data,
+            name_filter=feature,
+            show_body=False,
+            min_level=min_level,
+            max_level=max_level,
+        )
 
     if show_subclasses_section and data.get("subclasses"):
         if show_table or show_features_section:

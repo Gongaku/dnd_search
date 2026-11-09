@@ -920,7 +920,11 @@ def format_class_progression(
 
 
 def format_class_features(
-    data: Mapping[str, Any], name_filter: str = "", show_body: bool = True
+    data: Mapping[str, Any],
+    name_filter: str = "",
+    show_body: bool = True,
+    min_level: int = 1,
+    max_level: int = 20,
 ) -> None:
     """Render class feature descriptions."""
     class_name = data.get("class_name", "Class")
@@ -929,6 +933,17 @@ def format_class_features(
     if not features:
         console.print(
             f"[yellow]No feature descriptions found for {class_name}.[/yellow]"
+        )
+        return
+
+    features = [
+        f
+        for f in features
+        if f.get("level") is None or min_level <= f["level"] <= max_level
+    ]
+    if not features:
+        console.print(
+            f"[yellow]No features between level {min_level} and {max_level}.[/yellow]"
         )
         return
 
@@ -1551,7 +1566,11 @@ def _format_class_output(
         else:
             print(_plain_h2("Class Features"))
             print()
-        feat_list = features
+        feat_list = [
+            f
+            for f in features
+            if f.get("level") is None or min_level <= f["level"] <= max_level
+        ]
         if feature_filter:
             feat_list = [
                 f for f in feat_list if feature_filter.lower() in f["name"].lower()
